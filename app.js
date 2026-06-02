@@ -55,19 +55,12 @@ loadTeamsButton.addEventListener('click', async () => {
 
     teamsMessage.textContent = `Equipos cargados: ${data.length}`;
 
-    data.forEach((team) => {
-      const card = document.createElement('div');
-      card.className = 'team-card';
-
-      card.innerHTML = `
-        <h3>${team.name ?? 'Sin nombre'}</h3>
-        <p><strong>ID:</strong> ${team.id ?? 'Sin dato'}</p>
-        <p><strong>Código:</strong> ${team.code ?? 'Sin dato'}</p>
-        <p><strong>Grupo:</strong> ${team.group_name ?? team.group_code ?? 'Sin dato'}</p>
-      `;
-
-      teamsContainer.appendChild(card);
-    });
+data.forEach((team) => {
+  const card = document.createElement('div');
+  card.className = 'team-card';
+  card.innerHTML = `<pre>${JSON.stringify(team, null, 2)}</pre>`;
+  teamsContainer.appendChild(card);
+});
   } catch (error) {
     teamsMessage.textContent = 'Error inesperado: ' + error.message;
   }
