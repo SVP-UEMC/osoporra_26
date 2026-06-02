@@ -39,7 +39,7 @@ loadTeamsButton.addEventListener('click', async () => {
 
   try {
     const { data, error } = await supabase
-      .from('v_teams')
+      .from('teams')
       .select('*')
       .order('name', { ascending: true });
 
@@ -49,7 +49,7 @@ loadTeamsButton.addEventListener('click', async () => {
     }
 
     if (!data || data.length === 0) {
-      teamsMessage.textContent = 'La vista v_teams no devuelve datos.';
+      teamsMessage.textContent = 'La tabla teams no devuelve datos.';
       return;
     }
 
