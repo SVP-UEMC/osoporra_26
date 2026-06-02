@@ -9,18 +9,36 @@
 <body>
   <header class="header">
     <h1>Pronósticos Mundial 2026</h1>
-    <p>Primera base del frontend</p>
+    <p>Fase 1 del frontend conectada a GitHub Pages</p>
   </header>
 
   <main class="container">
     <section class="card">
-      <h2>Paso 1 completado</h2>
-      <p>Si ves esta página en GitHub Pages, ya tienes el hosting funcionando.</p>
-      <button id="testButton">Probar JavaScript</button>
-      <p id="message"></p>
+      <h2>Conexión con Supabase</h2>
+
+      <label for="supabaseUrl">Project URL</label>
+      <input id="supabaseUrl" type="text" placeholder="https://TU-PROYECTO.supabase.co" />
+
+      <label for="supabaseKey">Anon key</label>
+      <input id="supabaseKey" type="text" placeholder="Pega aquí tu anon key" />
+
+      <button id="connectButton">Conectar con Supabase</button>
+      <p id="connectMessage"></p>
+    </section>
+
+    <section class="card">
+      <h2>Acceso por magic link</h2>
+
+      <label for="email">Tu email</label>
+      <input id="email" type="email" placeholder="tuemail@dominio.com" />
+
+      <button id="loginButton">Enviar magic link</button>
+      <button id="sessionButton">Comprobar sesión</button>
+
+      <p id="authMessage"></p>
     </section>
   </main>
 
-  <script src="app.js"></script>
+  <script type="module" src="app.js"></script>
 </body>
 </html>
