@@ -9,7 +9,7 @@
 <body>
   <header class="header">
     <h1>Pronósticos Mundial 2026</h1>
-    <p>Fase 1 del frontend conectada a GitHub Pages</p>
+    <p>Fase inicial del frontend conectada a Supabase</p>
   </header>
 
   <main class="container">
@@ -27,15 +27,13 @@
     </section>
 
     <section class="card">
-      <h2>Acceso por magic link</h2>
+      <h2>Equipos desde v_teams</h2>
+      <p>Pulsa el botón para cargar los equipos desde Supabase.</p>
 
-      <label for="email">Tu email</label>
-      <input id="email" type="email" placeholder="tuemail@dominio.com" />
+      <button id="loadTeamsButton">Cargar equipos</button>
+      <p id="teamsMessage"></p>
 
-      <button id="loginButton">Enviar magic link</button>
-      <button id="sessionButton">Comprobar sesión</button>
-
-      <p id="authMessage"></p>
+      <div id="teamsContainer"></div>
     </section>
   </main>
 
