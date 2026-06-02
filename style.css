@@ -60,3 +60,25 @@ button:hover {
 p {
   margin-top: 16px;
 }
+
+#teamsContainer {
+  margin-top: 20px;
+  display: grid;
+  gap: 12px;
+}
+
+.team-card {
+  background: #fafafa;
+  border: 1px solid #dddddd;
+  border-radius: 10px;
+  padding: 16px;
+}
+
+.team-card h3 {
+  margin: 0 0 8px 0;
+  font-size: 18px;
+}
+
+.team-card p {
+  margin: 4px 0;
+}
