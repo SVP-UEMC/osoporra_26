@@ -5,10 +5,9 @@ const supabaseKeyInput = document.getElementById('supabaseKey');
 const connectButton = document.getElementById('connectButton');
 const connectMessage = document.getElementById('connectMessage');
 
-const emailInput = document.getElementById('email');
-const loginButton = document.getElementById('loginButton');
-const sessionButton = document.getElementById('sessionButton');
-const authMessage = document.getElementById('authMessage');
+const loadTeamsButton = document.getElementById('loadTeamsButton');
+const teamsMessage = document.getElementById('teamsMessage');
+const teamsContainer = document.getElementById('teamsContainer');
 
 let supabase = null;
 
@@ -29,58 +28,47 @@ connectButton.addEventListener('click', async () => {
   }
 });
 
-loginButton.addEventListener('click', async () => {
+loadTeamsButton.addEventListener('click', async () => {
   if (!supabase) {
-    authMessage.textContent = 'Primero conecta con Supabase.';
+    teamsMessage.textContent = 'Primero conecta con Supabase.';
     return;
   }
 
-  const email = emailInput.value.trim();
-
-  if (!email) {
-    authMessage.textContent = 'Debes escribir tu email.';
-    return;
-  }
+  teamsMessage.textContent = 'Cargando equipos...';
+  teamsContainer.innerHTML = '';
 
   try {
-    const { error } = await supabase.auth.signInWithOtp({
-      email,
-      options: {
-        emailRedirectTo: 'https://svp-uemc.github.io/osoporra_26/'
-      }
+    const { data, error } = await supabase
+      .from('v_teams')
+      .select('*')
+      .order('name', { ascending: true });
+
+    if (error) {
+      teamsMessage.textContent = 'Error al cargar equipos: ' + error.message;
+      return;
+    }
+
+    if (!data || data.length === 0) {
+      teamsMessage.textContent = 'La vista v_teams no devuelve datos.';
+      return;
+    }
+
+    teamsMessage.textContent = `Equipos cargados: ${data.length}`;
+
+    data.forEach((team) => {
+      const card = document.createElement('div');
+      card.className = 'team-card';
+
+      card.innerHTML = `
+        <h3>${team.name ?? 'Sin nombre'}</h3>
+        <p><strong>ID:</strong> ${team.id ?? 'Sin dato'}</p>
+        <p><strong>Código:</strong> ${team.code ?? 'Sin dato'}</p>
+        <p><strong>Grupo:</strong> ${team.group_name ?? team.group_code ?? 'Sin dato'}</p>
+      `;
+
+      teamsContainer.appendChild(card);
     });
-
-    if (error) {
-      authMessage.textContent = 'Error enviando magic link: ' + error.message;
-      return;
-    }
-
-    authMessage.textContent = 'Magic link enviado. Revisa tu correo.';
   } catch (error) {
-    authMessage.textContent = 'Error inesperado: ' + error.message;
-  }
-});
-
-sessionButton.addEventListener('click', async () => {
-  if (!supabase) {
-    authMessage.textContent = 'Primero conecta con Supabase.';
-    return;
-  }
-
-  try {
-    const { data, error } = await supabase.auth.getSession();
-
-    if (error) {
-      authMessage.textContent = 'Error al comprobar sesión: ' + error.message;
-      return;
-    }
-
-    if (data.session) {
-      authMessage.textContent = 'Sesión activa con: ' + data.session.user.email;
-    } else {
-      authMessage.textContent = 'No hay sesión activa.';
-    }
-  } catch (error) {
-    authMessage.textContent = 'Error inesperado: ' + error.message;
+    teamsMessage.textContent = 'Error inesperado: ' + error.message;
   }
 });
