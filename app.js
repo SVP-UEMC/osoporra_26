@@ -34,19 +34,20 @@ function isPlaceholderTeam(team) {
   return name.includes('tbc');
 }
 
-function getMatchState(match) {
-  const hasScore =
+function getMatchState(match, homeTeam, awayTeam) {
+  const hasFinalScore =
     match.home_score !== null &&
     match.away_score !== null;
 
-  if (hasScore || match.status === 'finished') {
+  if (hasFinalScore || match.status === 'finished') {
     return 'played';
   }
 
-  const homeBlocked = isPlaceholderTeam(match.home_team);
-  const awayBlocked = isPlaceholderTeam(match.away_team);
+  if (!homeTeam || !awayTeam) {
+    return 'locked';
+  }
 
-  if (homeBlocked || awayBlocked) {
+  if (isPlaceholderTeam(homeTeam) || isPlaceholderTeam(awayTeam)) {
     return 'locked';
   }
 
@@ -59,6 +60,14 @@ function getStateLabel(state) {
   return 'Pendiente de confirmar';
 }
 
+function formatDate(dateString) {
+  if (!dateString) return 'Sin fecha';
+  return new Date(dateString).toLocaleString('es-ES', {
+    dateStyle: 'short',
+    timeStyle: 'short'
+  });
+}
+
 loadButton.addEventListener('click', async () => {
   if (!supabase) {
     resultMessage.textContent = 'Primero conecta con Supabase.';
@@ -69,70 +78,84 @@ loadButton.addEventListener('click', async () => {
   resultContainer.innerHTML = '';
 
   try {
-    const { data, error } = await supabase
-      .from('matches')
-      .select(`
-        id,
-        match_number,
-        group_code,
-        kickoff_at,
-        prediction_deadline_at,
-        status,
-        home_score,
-        away_score,
-        home_score_et,
-        away_score_et,
-        home_penalties,
-        away_penalties,
-        home_team:home_team_id (
+    const [{ data: teams, error: teamsError }, { data: matches, error: matchesError }] = await Promise.all([
+      supabase
+        .from('teams')
+        .select('id, name, short_name, fifa_code, group_code, is_active'),
+      supabase
+        .from('matches')
+        .select(`
           id,
-          name,
-          short_name,
-          fifa_code,
-          group_code
-        ),
-        away_team:away_team_id (
-          id,
-          name,
-          short_name,
-          fifa_code,
-          group_code
-        )
-      `)
-      .order('kickoff_at', { ascending: true })
-      .limit(20);
+          match_number,
+          stage_id,
+          group_code,
+          kickoff_at,
+          prediction_deadline_at,
+          venue_id,
+          home_team_id,
+          away_team_id,
+          home_score,
+          away_score,
+          home_score_et,
+          away_score_et,
+          home_penalties,
+          away_penalties,
+          winner_team_id,
+          status
+        `)
+        .order('kickoff_at', { ascending: true })
+        .limit(24)
+    ]);
 
-    if (error) {
-      resultMessage.textContent = 'Error al cargar partidos: ' + error.message;
+    if (teamsError) {
+      resultMessage.textContent = 'Error al cargar teams: ' + teamsError.message;
       return;
     }
 
-    if (!data || data.length === 0) {
+    if (matchesError) {
+      resultMessage.textContent = 'Error al cargar matches: ' + matchesError.message;
+      return;
+    }
+
+    if (!matches || matches.length === 0) {
       resultMessage.textContent = 'La tabla matches no devuelve datos.';
       return;
     }
 
-    resultMessage.textContent = `Partidos cargados: ${data.length}`;
+    const teamsMap = new Map();
+    teams.forEach(team => {
+      teamsMap.set(team.id, team);
+    });
 
-    data.forEach((match) => {
+    resultMessage.textContent = `Partidos cargados: ${matches.length}`;
+
+    matches.forEach((match) => {
       const card = document.createElement('div');
       card.className = 'team-card';
 
-      const state = getMatchState(match);
-      const homeName = match.home_team?.name ?? 'TBC';
-      const awayName = match.away_team?.name ?? 'TBC';
+      const homeTeam = teamsMap.get(match.home_team_id);
+      const awayTeam = teamsMap.get(match.away_team_id);
 
-      const button = state === 'ready'
+      const homeName = homeTeam?.name ?? `Equipo ${match.home_team_id}`;
+      const awayName = awayTeam?.name ?? `Equipo ${match.away_team_id}`;
+
+      const state = getMatchState(match, homeTeam, awayTeam);
+      const stateLabel = getStateLabel(state);
+
+      const buttonHtml = state === 'ready'
         ? '<button>Hacer pronóstico</button>'
         : '<button disabled>Pronóstico no disponible</button>';
 
       card.innerHTML = `
         <h3>${homeName} vs ${awayName}</h3>
         <p><strong>Partido:</strong> ${match.match_number ?? 'Sin dato'}</p>
+        <p><strong>Fase ID:</strong> ${match.stage_id ?? 'Sin dato'}</p>
         <p><strong>Grupo:</strong> ${match.group_code ?? 'Eliminatoria'}</p>
-        <p><strong>Fecha:</strong> ${match.kickoff_at ?? 'Sin fecha'}</p>
-        <p><strong>Estado:</strong> ${getStateLabel(state)}</p>
-        ${button}
+        <p><strong>Inicio:</strong> ${formatDate(match.kickoff_at)}</p>
+        <p><strong>Límite pronóstico:</strong> ${formatDate(match.prediction_deadline_at)}</p>
+        <p><strong>Estado partido:</strong> ${match.status ?? 'Sin dato'}</p>
+        <p><strong>Estado pronóstico:</strong> ${stateLabel}</p>
+        ${buttonHtml}
       `;
 
       resultContainer.appendChild(card);
