@@ -114,7 +114,8 @@ loadButton.addEventListener('click', async () => {
         .limit(24),
       supabase
         .from('stages')
-        .select('*')
+        .select('id, code, name, sort_order, is_knockout')
+        .order('sort_order', { ascending: true })
     ]);
 
     if (teamsError) {
