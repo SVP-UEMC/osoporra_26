@@ -5,9 +5,9 @@ const supabaseKeyInput = document.getElementById('supabaseKey');
 const connectButton = document.getElementById('connectButton');
 const connectMessage = document.getElementById('connectMessage');
 
-const loadTeamsButton = document.getElementById('loadTeamsButton');
-const teamsMessage = document.getElementById('teamsMessage');
-const teamsContainer = document.getElementById('teamsContainer');
+const loadMatchesButton = document.getElementById('loadTeamsButton');
+const matchesMessage = document.getElementById('teamsMessage');
+const matchesContainer = document.getElementById('teamsContainer');
 
 let supabase = null;
 
@@ -28,40 +28,41 @@ connectButton.addEventListener('click', async () => {
   }
 });
 
-loadTeamsButton.addEventListener('click', async () => {
+loadMatchesButton.addEventListener('click', async () => {
   if (!supabase) {
-    teamsMessage.textContent = 'Primero conecta con Supabase.';
+    matchesMessage.textContent = 'Primero conecta con Supabase.';
     return;
   }
 
-  teamsMessage.textContent = 'Cargando equipos...';
-  teamsContainer.innerHTML = '';
+  matchesMessage.textContent = 'Cargando partidos...';
+  matchesContainer.innerHTML = '';
 
   try {
     const { data, error } = await supabase
-      .from('teams')
+      .from('matches')
       .select('*')
-      .order('name', { ascending: true });
+      .order('id', { ascending: true })
+      .limit(2);
 
     if (error) {
-      teamsMessage.textContent = 'Error al cargar equipos: ' + error.message;
+      matchesMessage.textContent = 'Error al cargar partidos: ' + error.message;
       return;
     }
 
     if (!data || data.length === 0) {
-      teamsMessage.textContent = 'La tabla teams no devuelve datos.';
+      matchesMessage.textContent = 'La tabla matches no devuelve datos.';
       return;
     }
 
-    teamsMessage.textContent = `Equipos cargados: ${data.length}`;
+    matchesMessage.textContent = `Partidos cargados: ${data.length}`;
 
-    data.forEach((team) => {
+    data.forEach((match) => {
       const card = document.createElement('div');
       card.className = 'team-card';
-      card.innerHTML = `<pre>${JSON.stringify(team, null, 2)}</pre>`;
-      teamsContainer.appendChild(card);
+      card.innerHTML = `<pre>${JSON.stringify(match, null, 2)}</pre>`;
+      matchesContainer.appendChild(card);
     });
   } catch (error) {
-    teamsMessage.textContent = 'Error inesperado: ' + error.message;
+    matchesMessage.textContent = 'Error inesperado: ' + error.message;
   }
 });
