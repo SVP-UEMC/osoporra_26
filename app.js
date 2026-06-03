@@ -30,12 +30,14 @@ connectButton.addEventListener('click', async () => {
 
 function isPlaceholderTeam(team) {
   if (!team) return true;
-  const name = (team.name || '').toLowerCase();
+  const name = String(team.name || '').toLowerCase();
   return name.includes('tbc');
 }
 
 function getMatchState(match, homeTeam, awayTeam) {
-  const hasFinalScore = match.home_score !== null && match.away_score !== null;
+  const hasFinalScore =
+    match.home_score !== null &&
+    match.away_score !== null;
 
   if (hasFinalScore || match.status === 'finished') {
     return 'played';
@@ -139,10 +141,14 @@ loadButton.addEventListener('click', async () => {
     }
 
     const teamsMap = new Map();
-    teams.forEach(team => teamsMap.set(team.id, team));
+    teams.forEach((team) => {
+      teamsMap.set(Number(team.id), team);
+    });
 
     const stagesMap = new Map();
-    stages.forEach(stage => stagesMap.set(stage.id, stage));
+    stages.forEach((stage) => {
+      stagesMap.set(Number(stage.id), stage);
+    });
 
     resultMessage.textContent = `Partidos cargados: ${matches.length}`;
 
@@ -150,13 +156,13 @@ loadButton.addEventListener('click', async () => {
       const card = document.createElement('div');
       card.className = 'team-card';
 
-      const homeTeam = teamsMap.get(match.home_team_id);
-      const awayTeam = teamsMap.get(match.away_team_id);
-      const stage = stagesMap.get(match.stage_id);
+      const homeTeam = teamsMap.get(Number(match.home_team_id));
+      const awayTeam = teamsMap.get(Number(match.away_team_id));
+      const stage = stagesMap.get(Number(match.stage_id));
 
       const homeName = homeTeam?.name ?? `Equipo ${match.home_team_id}`;
       const awayName = awayTeam?.name ?? `Equipo ${match.away_team_id}`;
-      const stageName = stage?.name ?? `Fase ${match.stage_id}`;
+      const stageName = stage ? stage.name : `Fase ${match.stage_id}`;
 
       const state = getMatchState(match, homeTeam, awayTeam);
       const stateLabel = getStateLabel(state);
