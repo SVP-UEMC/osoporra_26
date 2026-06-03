@@ -35,9 +35,7 @@ function isPlaceholderTeam(team) {
 }
 
 function getMatchState(match, homeTeam, awayTeam) {
-  const hasFinalScore =
-    match.home_score !== null &&
-    match.away_score !== null;
+  const hasFinalScore = match.home_score !== null && match.away_score !== null;
 
   if (hasFinalScore || match.status === 'finished') {
     return 'played';
@@ -62,9 +60,13 @@ function getStateLabel(state) {
 
 function formatDate(dateString) {
   if (!dateString) return 'Sin fecha';
+
   return new Date(dateString).toLocaleString('es-ES', {
-    dateStyle: 'short',
-    timeStyle: 'short'
+    day: '2-digit',
+    month: '2-digit',
+    year: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit'
   });
 }
 
@@ -78,7 +80,11 @@ loadButton.addEventListener('click', async () => {
   resultContainer.innerHTML = '';
 
   try {
-    const [{ data: teams, error: teamsError }, { data: matches, error: matchesError }] = await Promise.all([
+    const [
+      { data: teams, error: teamsError },
+      { data: matches, error: matchesError },
+      { data: stages, error: stagesError }
+    ] = await Promise.all([
       supabase
         .from('teams')
         .select('id, name, short_name, fifa_code, group_code, is_active'),
@@ -104,7 +110,11 @@ loadButton.addEventListener('click', async () => {
           status
         `)
         .order('kickoff_at', { ascending: true })
-        .limit(24)
+        .order('match_number', { ascending: true })
+        .limit(24),
+      supabase
+        .from('stages')
+        .select('*')
     ]);
 
     if (teamsError) {
@@ -117,15 +127,21 @@ loadButton.addEventListener('click', async () => {
       return;
     }
 
+    if (stagesError) {
+      resultMessage.textContent = 'Error al cargar stages: ' + stagesError.message;
+      return;
+    }
+
     if (!matches || matches.length === 0) {
       resultMessage.textContent = 'La tabla matches no devuelve datos.';
       return;
     }
 
     const teamsMap = new Map();
-    teams.forEach(team => {
-      teamsMap.set(team.id, team);
-    });
+    teams.forEach(team => teamsMap.set(team.id, team));
+
+    const stagesMap = new Map();
+    stages.forEach(stage => stagesMap.set(stage.id, stage));
 
     resultMessage.textContent = `Partidos cargados: ${matches.length}`;
 
@@ -135,9 +151,11 @@ loadButton.addEventListener('click', async () => {
 
       const homeTeam = teamsMap.get(match.home_team_id);
       const awayTeam = teamsMap.get(match.away_team_id);
+      const stage = stagesMap.get(match.stage_id);
 
       const homeName = homeTeam?.name ?? `Equipo ${match.home_team_id}`;
       const awayName = awayTeam?.name ?? `Equipo ${match.away_team_id}`;
+      const stageName = stage?.name ?? `Fase ${match.stage_id}`;
 
       const state = getMatchState(match, homeTeam, awayTeam);
       const stateLabel = getStateLabel(state);
@@ -149,7 +167,7 @@ loadButton.addEventListener('click', async () => {
       card.innerHTML = `
         <h3>${homeName} vs ${awayName}</h3>
         <p><strong>Partido:</strong> ${match.match_number ?? 'Sin dato'}</p>
-        <p><strong>Fase ID:</strong> ${match.stage_id ?? 'Sin dato'}</p>
+        <p><strong>Fase:</strong> ${stageName}</p>
         <p><strong>Grupo:</strong> ${match.group_code ?? 'Eliminatoria'}</p>
         <p><strong>Inicio:</strong> ${formatDate(match.kickoff_at)}</p>
         <p><strong>Límite pronóstico:</strong> ${formatDate(match.prediction_deadline_at)}</p>
