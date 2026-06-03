@@ -35,22 +35,11 @@ function isPlaceholderTeam(team) {
 }
 
 function getMatchState(match, homeTeam, awayTeam) {
-  const hasFinalScore =
-    match.home_score !== null &&
-    match.away_score !== null;
+  const hasFinalScore = match.home_score !== null && match.away_score !== null;
 
-  if (hasFinalScore || match.status === 'finished') {
-    return 'played';
-  }
-
-  if (!homeTeam || !awayTeam) {
-    return 'locked';
-  }
-
-  if (isPlaceholderTeam(homeTeam) || isPlaceholderTeam(awayTeam)) {
-    return 'locked';
-  }
-
+  if (hasFinalScore || match.status === 'finished') return 'played';
+  if (!homeTeam || !awayTeam) return 'locked';
+  if (isPlaceholderTeam(homeTeam) || isPlaceholderTeam(awayTeam)) return 'locked';
   return 'ready';
 }
 
@@ -70,6 +59,43 @@ function formatDate(dateString) {
     hour: '2-digit',
     minute: '2-digit'
   });
+}
+
+function renderPhaseSection(phaseName, matches, teamsMap) {
+  const section = document.createElement('section');
+  section.className = 'team-card';
+  section.style.marginBottom = '16px';
+
+  const header = document.createElement('h2');
+  header.textContent = phaseName;
+  section.appendChild(header);
+
+  matches.forEach((match) => {
+    const homeTeam = teamsMap.get(Number(match.home_team_id));
+    const awayTeam = teamsMap.get(Number(match.away_team_id));
+
+    const homeName = homeTeam?.name ?? `Equipo ${match.home_team_id}`;
+    const awayName = awayTeam?.name ?? `Equipo ${match.away_team_id}`;
+    const state = getMatchState(match, homeTeam, awayTeam);
+    const stateLabel = getStateLabel(state);
+
+    const item = document.createElement('div');
+    item.style.padding = '12px 0';
+    item.innerHTML = `
+      <h3>${homeName} vs ${awayName}</h3>
+      <p><strong>Partido:</strong> ${match.match_number ?? 'Sin dato'}</p>
+      <p><strong>Grupo:</strong> ${match.group_code ?? 'Eliminatoria'}</p>
+      <p><strong>Inicio:</strong> ${formatDate(match.kickoff_at)}</p>
+      <p><strong>Límite pronóstico:</strong> ${formatDate(match.prediction_deadline_at)}</p>
+      <p><strong>Estado partido:</strong> ${match.status ?? 'Sin dato'}</p>
+      <p><strong>Estado pronóstico:</strong> ${stateLabel}</p>
+      <button ${state === 'ready' ? '' : 'disabled'}>${state === 'ready' ? 'Hacer pronóstico' : 'Pronóstico no disponible'}</button>
+    `;
+
+    section.appendChild(item);
+  });
+
+  return section;
 }
 
 loadButton.addEventListener('click', async () => {
@@ -141,49 +167,38 @@ loadButton.addEventListener('click', async () => {
     }
 
     const teamsMap = new Map();
-    teams.forEach((team) => {
-      teamsMap.set(Number(team.id), team);
-    });
+    teams.forEach((team) => teamsMap.set(Number(team.id), team));
 
     const stagesMap = new Map();
-    stages.forEach((stage) => {
-      stagesMap.set(Number(stage.id), stage);
+    stages.forEach((stage) => stagesMap.set(Number(stage.id), stage));
+
+    const phaseOrder = stages.map(stage => ({
+      id: Number(stage.id),
+      name: stage.name,
+      sort_order: Number(stage.sort_order ?? 9999)
+    })).sort((a, b) => a.sort_order - b.sort_order);
+
+    const grouped = new Map();
+    matches.forEach((match) => {
+      const stage = stagesMap.get(Number(match.stage_id));
+      const phaseName = stage?.name || `Fase ${match.stage_id}`;
+      if (!grouped.has(phaseName)) grouped.set(phaseName, []);
+      grouped.get(phaseName).push(match);
     });
 
     resultMessage.textContent = `Partidos cargados: ${matches.length}`;
 
-    matches.forEach((match) => {
-      const card = document.createElement('div');
-      card.className = 'team-card';
+    phaseOrder.forEach(({ name }) => {
+      const phaseMatches = grouped.get(name);
+      if (phaseMatches && phaseMatches.length) {
+        resultContainer.appendChild(renderPhaseSection(name, phaseMatches, teamsMap));
+      }
+    });
 
-      const homeTeam = teamsMap.get(Number(match.home_team_id));
-      const awayTeam = teamsMap.get(Number(match.away_team_id));
-      const stage = stagesMap.get(Number(match.stage_id));
-
-      const homeName = homeTeam?.name ?? `Equipo ${match.home_team_id}`;
-      const awayName = awayTeam?.name ?? `Equipo ${match.away_team_id}`;
-      const stageName = stage?.name || `Fase ${match.stage_id}`;
-
-      const state = getMatchState(match, homeTeam, awayTeam);
-      const stateLabel = getStateLabel(state);
-
-      const buttonHtml = state === 'ready'
-        ? '<button>Hacer pronóstico</button>'
-        : '<button disabled>Pronóstico no disponible</button>';
-
-      card.innerHTML = `
-        <h3>${homeName} vs ${awayName}</h3>
-        <p><strong>Partido:</strong> ${match.match_number ?? 'Sin dato'}</p>
-        <p><strong>Fase:</strong> ${stageName}</p>
-        <p><strong>Grupo:</strong> ${match.group_code ?? 'Eliminatoria'}</p>
-        <p><strong>Inicio:</strong> ${formatDate(match.kickoff_at)}</p>
-        <p><strong>Límite pronóstico:</strong> ${formatDate(match.prediction_deadline_at)}</p>
-        <p><strong>Estado partido:</strong> ${match.status ?? 'Sin dato'}</p>
-        <p><strong>Estado pronóstico:</strong> ${stateLabel}</p>
-        ${buttonHtml}
-      `;
-
-      resultContainer.appendChild(card);
+    grouped.forEach((phaseMatches, phaseName) => {
+      if (!phaseOrder.some(phase => phase.name === phaseName)) {
+        resultContainer.appendChild(renderPhaseSection(phaseName, phaseMatches, teamsMap));
+      }
     });
   } catch (error) {
     resultMessage.textContent = 'Error inesperado: ' + error.message;
