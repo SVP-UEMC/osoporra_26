@@ -35,11 +35,22 @@ function isPlaceholderTeam(team) {
 }
 
 function getMatchState(match, homeTeam, awayTeam) {
-  const hasFinalScore = match.home_score !== null && match.away_score !== null;
+  const hasFinalScore =
+    match.home_score !== null &&
+    match.away_score !== null;
 
-  if (hasFinalScore || match.status === 'finished') return 'played';
-  if (!homeTeam || !awayTeam) return 'locked';
-  if (isPlaceholderTeam(homeTeam) || isPlaceholderTeam(awayTeam)) return 'locked';
+  if (hasFinalScore || match.status === 'finished') {
+    return 'played';
+  }
+
+  if (!homeTeam || !awayTeam) {
+    return 'locked';
+  }
+
+  if (isPlaceholderTeam(homeTeam) || isPlaceholderTeam(awayTeam)) {
+    return 'locked';
+  }
+
   return 'ready';
 }
 
@@ -51,6 +62,7 @@ function getStateLabel(state) {
 
 function formatDate(dateString) {
   if (!dateString) return 'Sin fecha';
+
   return new Date(dateString).toLocaleString('es-ES', {
     day: '2-digit',
     month: '2-digit',
@@ -129,26 +141,14 @@ loadButton.addEventListener('click', async () => {
     }
 
     const teamsMap = new Map();
-    teams.forEach((team) => teamsMap.set(Number(team.id), team));
+    teams.forEach((team) => {
+      teamsMap.set(Number(team.id), team);
+    });
 
     const stagesMap = new Map();
-    stages.forEach((stage) => stagesMap.set(Number(stage.id), stage));
-
-    const debugBox = document.createElement('div');
-    debugBox.className = 'team-card';
-    debugBox.innerHTML = `
-      <h3>Debug stages</h3>
-      <pre>${JSON.stringify({
-        firstMatchStageId: matches[0]?.stage_id,
-        firstMatchStageIdType: typeof matches[0]?.stage_id,
-        stage46Exists: stagesMap.has(46),
-        stage46Type: typeof [...stagesMap.keys()][0],
-        stage46Value: stagesMap.get(46),
-        stage46ValueByString: stagesMap.get('46'),
-        stagesPreview: stages.slice(0, 3)
-      }, null, 2)}</pre>
-    `;
-    resultContainer.appendChild(debugBox);
+    stages.forEach((stage) => {
+      stagesMap.set(Number(stage.id), stage);
+    });
 
     resultMessage.textContent = `Partidos cargados: ${matches.length}`;
 
@@ -167,6 +167,10 @@ loadButton.addEventListener('click', async () => {
       const state = getMatchState(match, homeTeam, awayTeam);
       const stateLabel = getStateLabel(state);
 
+      const buttonHtml = state === 'ready'
+        ? '<button>Hacer pronóstico</button>'
+        : '<button disabled>Pronóstico no disponible</button>';
+
       card.innerHTML = `
         <h3>${homeName} vs ${awayName}</h3>
         <p><strong>Partido:</strong> ${match.match_number ?? 'Sin dato'}</p>
@@ -176,7 +180,7 @@ loadButton.addEventListener('click', async () => {
         <p><strong>Límite pronóstico:</strong> ${formatDate(match.prediction_deadline_at)}</p>
         <p><strong>Estado partido:</strong> ${match.status ?? 'Sin dato'}</p>
         <p><strong>Estado pronóstico:</strong> ${stateLabel}</p>
-        <button ${state === 'ready' ? '' : 'disabled'}>${state === 'ready' ? 'Hacer pronóstico' : 'Pronóstico no disponible'}</button>
+        ${buttonHtml}
       `;
 
       resultContainer.appendChild(card);
