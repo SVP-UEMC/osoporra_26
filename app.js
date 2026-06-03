@@ -162,7 +162,7 @@ loadButton.addEventListener('click', async () => {
 
       const homeName = homeTeam?.name ?? `Equipo ${match.home_team_id}`;
       const awayName = awayTeam?.name ?? `Equipo ${match.away_team_id}`;
-      const stageName = stage ? stage.name : `Fase ${match.stage_id}`;
+      const stageName = stage?.name || `Fase ${match.stage_id}`;
 
       const state = getMatchState(match, homeTeam, awayTeam);
       const stateLabel = getStateLabel(state);
