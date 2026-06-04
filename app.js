@@ -5,6 +5,13 @@ const supabaseKeyInput = document.getElementById('supabaseKey');
 const connectButton = document.getElementById('connectButton');
 const connectMessage = document.getElementById('connectMessage');
 
+const emailInput = document.getElementById('emailInput');
+const sendOtpButton = document.getElementById('sendOtpButton');
+const checkSessionButton = document.getElementById('checkSessionButton');
+const logoutButton = document.getElementById('logoutButton');
+const authMessage = document.getElementById('authMessage');
+const sessionMessage = document.getElementById('sessionMessage');
+
 const loadButton = document.getElementById('loadTeamsButton');
 const resultMessage = document.getElementById('teamsMessage');
 const resultContainer = document.getElementById('teamsContainer');
@@ -23,10 +30,93 @@ connectButton.addEventListener('click', async () => {
   try {
     supabase = createClient(url, key);
     connectMessage.textContent = 'Conexión creada correctamente.';
+    await refreshSessionInfo();
   } catch (error) {
     connectMessage.textContent = 'Error al crear la conexión: ' + error.message;
   }
 });
+
+sendOtpButton.addEventListener('click', async () => {
+  if (!supabase) {
+    authMessage.textContent = 'Primero conecta con Supabase.';
+    return;
+  }
+
+  const email = emailInput.value.trim().toLowerCase();
+
+  if (!email) {
+    authMessage.textContent = 'Introduce un correo electrónico.';
+    return;
+  }
+
+  authMessage.textContent = 'Enviando acceso...';
+
+  try {
+    const { error } = await supabase.auth.signInWithOtp({
+      email,
+      options: {
+        shouldCreateUser: false,
+        emailRedirectTo: window.location.href
+      }
+    });
+
+    if (error) {
+      authMessage.textContent = 'No se ha podido enviar el acceso. Si tu correo está autorizado, inténtalo de nuevo en unos minutos.';
+      return;
+    }
+
+    authMessage.textContent = 'Si tu correo está autorizado, recibirás un enlace o código de acceso.';
+  } catch (error) {
+    authMessage.textContent = 'Error inesperado al iniciar acceso: ' + error.message;
+  }
+});
+
+checkSessionButton.addEventListener('click', async () => {
+  if (!supabase) {
+    sessionMessage.textContent = 'Primero conecta con Supabase.';
+    return;
+  }
+
+  await refreshSessionInfo();
+});
+
+logoutButton.addEventListener('click', async () => {
+  if (!supabase) {
+    sessionMessage.textContent = 'Primero conecta con Supabase.';
+    return;
+  }
+
+  const { error } = await supabase.auth.signOut();
+
+  if (error) {
+    sessionMessage.textContent = 'Error al cerrar sesión: ' + error.message;
+    return;
+  }
+
+  sessionMessage.textContent = 'Sesión cerrada.';
+});
+
+async function refreshSessionInfo() {
+  if (!supabase) return;
+
+  try {
+    const { data, error } = await supabase.auth.getUser();
+
+    if (error) {
+      sessionMessage.textContent = 'Error al comprobar sesión: ' + error.message;
+      return;
+    }
+
+    if (!data.user) {
+      sessionMessage.textContent = 'No hay ninguna sesión iniciada.';
+      return;
+    }
+
+    sessionMessage.textContent = `Sesión iniciada como: ${data.user.email}`;
+  } catch (error) {
+    sessionMessage.textContent = 'Error inesperado al comprobar sesión: ' + error.message;
+  }
+}
 
 function isPlaceholderTeam(team) {
   if (!team) return true;
