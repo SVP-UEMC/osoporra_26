@@ -3,40 +3,51 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Pronósticos Mundial</title>
+  <title>Pronósticos Mundial 2026</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <header class="header">
-    <h1>Pronósticos Mundial 2026</h1>
-    <p>Fase inicial del frontend conectada a Supabase</p>
-  </header>
+  <main class="app-shell">
+    <section class="team-card">
+      <h1>Pronósticos Mundial 2026</h1>
+      <p>Conecta con Supabase y accede con tu correo autorizado.</p>
+    </section>
 
-  <main class="container">
-    <section class="card">
-      <h2>Conexión con Supabase</h2>
-
+    <section class="team-card">
+      <h2>Conexión Supabase</h2>
       <label for="supabaseUrl">Project URL</label>
       <input id="supabaseUrl" type="text" placeholder="https://TU-PROYECTO.supabase.co" />
 
       <label for="supabaseKey">Anon key</label>
       <input id="supabaseKey" type="text" placeholder="Pega aquí tu anon key" />
 
-      <button id="connectButton">Conectar con Supabase</button>
+      <button id="connectButton">Conectar</button>
       <p id="connectMessage"></p>
     </section>
 
-    <section class="card">
-      <h2>Equipos desde v_teams</h2>
-      <p>Pulsa el botón para cargar los equipos desde Supabase.</p>
+    <section class="team-card">
+      <h2>Acceso</h2>
+      <label for="emailInput">Correo electrónico</label>
+      <input id="emailInput" type="email" placeholder="tu-correo@ejemplo.com" />
 
-      <button id="loadTeamsButton">Cargar equipos</button>
+      <div class="button-row">
+        <button id="sendOtpButton">Enviar acceso por email</button>
+        <button id="checkSessionButton">Comprobar sesión</button>
+        <button id="logoutButton">Cerrar sesión</button>
+      </div>
+
+      <p id="authMessage"></p>
+      <p id="sessionMessage"></p>
+    </section>
+
+    <section class="team-card">
+      <h2>Partidos</h2>
+      <button id="loadTeamsButton">Cargar partidos</button>
       <p id="teamsMessage"></p>
-
       <div id="teamsContainer"></div>
     </section>
   </main>
 
-  <script type="module" src="app.js?v=11"></script>
+  <script type="module" src="app.js?v=12"></script>
 </body>
 </html>
