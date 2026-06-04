@@ -10,7 +10,7 @@
   <main class="app-shell">
     <section class="team-card">
       <h1>Pronósticos Mundial 2026</h1>
-      <p>Conecta con Supabase y accede con tu correo autorizado.</p>
+      <p>Acceso privado con email autorizado y nombre visible independiente.</p>
     </section>
 
     <section class="team-card">
@@ -26,18 +26,39 @@
     </section>
 
     <section class="team-card">
-      <h2>Acceso</h2>
+      <h2>Registro y login</h2>
+
       <label for="emailInput">Correo electrónico</label>
       <input id="emailInput" type="email" placeholder="tu-correo@ejemplo.com" />
 
+      <label for="passwordInput">Contraseña</label>
+      <input id="passwordInput" type="password" placeholder="Introduce tu contraseña" />
+
+      <label for="passwordConfirmInput">Confirmar contraseña (solo registro)</label>
+      <input id="passwordConfirmInput" type="password" placeholder="Repite la contraseña" />
+
       <div class="button-row">
-        <button id="sendOtpButton">Enviar acceso por email</button>
-        <button id="checkSessionButton">Comprobar sesión</button>
+        <button id="registerButton">Registrarme</button>
+        <button id="loginButton">Iniciar sesión</button>
         <button id="logoutButton">Cerrar sesión</button>
       </div>
 
       <p id="authMessage"></p>
       <p id="sessionMessage"></p>
+    </section>
+
+    <section class="team-card">
+      <h2>Perfil</h2>
+
+      <label for="displayNameInput">Nombre visible en la app</label>
+      <input id="displayNameInput" type="text" placeholder="Ej. Sulo, El Tigre, Pepito..." />
+
+      <div class="button-row">
+        <button id="loadProfileButton">Cargar perfil</button>
+        <button id="saveProfileButton">Guardar nombre visible</button>
+      </div>
+
+      <p id="profileMessage"></p>
     </section>
 
     <section class="team-card">
@@ -48,6 +69,6 @@
     </section>
   </main>
 
-  <script type="module" src="app.js?v=15"></script>
+  <script type="module" src="app.js?v=16"></script>
 </body>
 </html>
