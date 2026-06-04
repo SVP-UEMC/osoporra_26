@@ -6,22 +6,24 @@ const connectButton = document.getElementById('connectButton');
 const connectMessage = document.getElementById('connectMessage');
 
 const emailInput = document.getElementById('emailInput');
-const sendOtpButton = document.getElementById('sendOtpButton');
-const checkSessionButton = document.getElementById('checkSessionButton');
+const passwordInput = document.getElementById('passwordInput');
+const passwordConfirmInput = document.getElementById('passwordConfirmInput');
+const registerButton = document.getElementById('registerButton');
+const loginButton = document.getElementById('loginButton');
 const logoutButton = document.getElementById('logoutButton');
 const authMessage = document.getElementById('authMessage');
 const sessionMessage = document.getElementById('sessionMessage');
+
+const displayNameInput = document.getElementById('displayNameInput');
+const loadProfileButton = document.getElementById('loadProfileButton');
+const saveProfileButton = document.getElementById('saveProfileButton');
+const profileMessage = document.getElementById('profileMessage');
 
 const loadButton = document.getElementById('loadTeamsButton');
 const resultMessage = document.getElementById('teamsMessage');
 const resultContainer = document.getElementById('teamsContainer');
 
 let supabase = null;
-
-const allowedEmails = [
-  'sulo13@hotmail.com'
-  // añade aquí los correos autorizados temporalmente
-];
 
 connectButton.addEventListener('click', async () => {
   const url = supabaseUrlInput.value.trim();
@@ -35,59 +37,112 @@ connectButton.addEventListener('click', async () => {
   try {
     supabase = createClient(url, key);
     connectMessage.textContent = 'Conexión creada correctamente.';
-    await handleAuthRedirect();
     await refreshSessionInfo();
   } catch (error) {
     connectMessage.textContent = 'Error al crear la conexión: ' + error.message;
   }
 });
 
-sendOtpButton.addEventListener('click', async () => {
+registerButton.addEventListener('click', async () => {
   if (!supabase) {
     authMessage.textContent = 'Primero conecta con Supabase.';
     return;
   }
 
   const email = emailInput.value.trim().toLowerCase();
+  const password = passwordInput.value;
+  const passwordConfirm = passwordConfirmInput.value;
 
-  if (!email) {
-    authMessage.textContent = 'Introduce un correo electrónico.';
+  if (!email || !password || !passwordConfirm) {
+    authMessage.textContent = 'Para registrarte debes rellenar email, contraseña y confirmación.';
     return;
   }
 
-  if (!allowedEmails.includes(email)) {
-    authMessage.textContent = 'Este correo no está autorizado para acceder.';
+  if (password !== passwordConfirm) {
+    authMessage.textContent = 'Las contraseñas no coinciden.';
     return;
   }
 
-  authMessage.textContent = 'Enviando acceso...';
+  if (password.length < 8) {
+    authMessage.textContent = 'La contraseña debe tener al menos 8 caracteres.';
+    return;
+  }
 
   try {
-    const { error } = await supabase.auth.signInWithOtp({
-      email,
-      options: {
-        emailRedirectTo: window.location.origin + window.location.pathname
-      }
+    authMessage.textContent = 'Comprobando autorización del email...';
+
+    const { data: isAuthorized, error: authCheckError } = await supabase.rpc('is_email_authorized', {
+      p_email: email
     });
 
-    if (error) {
-      authMessage.textContent = 'Error al enviar el acceso: ' + error.message;
+    if (authCheckError) {
+      authMessage.textContent = 'Error al comprobar email autorizado: ' + authCheckError.message;
       return;
     }
 
-    authMessage.textContent = 'Te hemos enviado un enlace de acceso al correo.';
+    if (!isAuthorized) {
+      authMessage.textContent = 'Tu correo no está autorizado para registrarse.';
+      return;
+    }
+
+    authMessage.textContent = 'Creando cuenta...';
+
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password
+    });
+
+    if (error) {
+      authMessage.textContent = 'Error en el registro: ' + error.message;
+      return;
+    }
+
+    if (data.user && !data.session) {
+      authMessage.textContent = 'Cuenta creada. Revisa tu correo para confirmar el registro antes de iniciar sesión.';
+      return;
+    }
+
+    authMessage.textContent = 'Cuenta creada e inicio de sesión completado.';
+    await refreshSessionInfo();
+    await loadOwnProfile();
   } catch (error) {
-    authMessage.textContent = 'Error inesperado al iniciar acceso: ' + error.message;
+    authMessage.textContent = 'Error inesperado en el registro: ' + error.message;
   }
 });
 
-checkSessionButton.addEventListener('click', async () => {
+loginButton.addEventListener('click', async () => {
   if (!supabase) {
-    sessionMessage.textContent = 'Primero conecta con Supabase.';
+    authMessage.textContent = 'Primero conecta con Supabase.';
     return;
   }
 
-  await refreshSessionInfo();
+  const email = emailInput.value.trim().toLowerCase();
+  const password = passwordInput.value;
+
+  if (!email || !password) {
+    authMessage.textContent = 'Para iniciar sesión debes rellenar email y contraseña.';
+    return;
+  }
+
+  try {
+    authMessage.textContent = 'Iniciando sesión...';
+
+    const { error } = await supabase.auth.signInWithPassword({
+      email,
+      password
+    });
+
+    if (error) {
+      authMessage.textContent = 'Error al iniciar sesión: ' + error.message;
+      return;
+    }
+
+    authMessage.textContent = 'Sesión iniciada correctamente.';
+    await refreshSessionInfo();
+    await loadOwnProfile();
+  } catch (error) {
+    authMessage.textContent = 'Error inesperado al iniciar sesión: ' + error.message;
+  }
 });
 
 logoutButton.addEventListener('click', async () => {
@@ -105,67 +160,62 @@ logoutButton.addEventListener('click', async () => {
 
   sessionMessage.textContent = 'Sesión cerrada.';
   authMessage.textContent = '';
+  profileMessage.textContent = '';
+  displayNameInput.value = '';
 });
 
-async function handleAuthRedirect() {
-  if (!supabase) return;
+loadProfileButton.addEventListener('click', async () => {
+  if (!supabase) {
+    profileMessage.textContent = 'Primero conecta con Supabase.';
+    return;
+  }
 
-  const url = new URL(window.location.href);
-  const hash = window.location.hash.startsWith('#')
-    ? window.location.hash.substring(1)
-    : window.location.hash;
+  await loadOwnProfile();
+});
 
-  const hashParams = new URLSearchParams(hash);
-  const accessToken = hashParams.get('access_token');
-  const refreshToken = hashParams.get('refresh_token');
-  const hashError = hashParams.get('error_description') || hashParams.get('error');
+saveProfileButton.addEventListener('click', async () => {
+  if (!supabase) {
+    profileMessage.textContent = 'Primero conecta con Supabase.';
+    return;
+  }
 
-  if (accessToken && refreshToken) {
-    try {
-      const { error } = await supabase.auth.setSession({
-        access_token: accessToken,
-        refresh_token: refreshToken
-      });
+  const { data: userData, error: userError } = await supabase.auth.getUser();
 
-      if (error) {
-        authMessage.textContent = 'Error al completar el acceso: ' + error.message;
-        return;
-      }
+  if (userError) {
+    profileMessage.textContent = 'Error al obtener usuario: ' + userError.message;
+    return;
+  }
 
-      window.history.replaceState({}, document.title, url.pathname);
-      authMessage.textContent = 'Acceso completado correctamente.';
-      return;
-    } catch (error) {
-      authMessage.textContent = 'Error inesperado al procesar el acceso: ' + error.message;
+  if (!userData.user) {
+    profileMessage.textContent = 'Debes iniciar sesión para guardar tu perfil.';
+    return;
+  }
+
+  const displayName = displayNameInput.value.trim();
+
+  if (displayName.length < 3 || displayName.length > 30) {
+    profileMessage.textContent = 'El nombre visible debe tener entre 3 y 30 caracteres.';
+    return;
+  }
+
+  try {
+    const { error } = await supabase
+      .from('profiles')
+      .update({
+        display_name: displayName
+      })
+      .eq('id', userData.user.id);
+
+    if (error) {
+      profileMessage.textContent = 'Error al guardar el nombre visible: ' + error.message;
       return;
     }
+
+    profileMessage.textContent = 'Nombre visible guardado correctamente.';
+  } catch (error) {
+    profileMessage.textContent = 'Error inesperado al guardar el perfil: ' + error.message;
   }
-
-  const code = url.searchParams.get('code');
-
-  if (code) {
-    try {
-      const { error } = await supabase.auth.exchangeCodeForSession(code);
-
-      if (error) {
-        authMessage.textContent = 'Error al completar el acceso: ' + error.message;
-        return;
-      }
-
-      url.searchParams.delete('code');
-      window.history.replaceState({}, document.title, url.pathname);
-      authMessage.textContent = 'Acceso completado correctamente.';
-      return;
-    } catch (error) {
-      authMessage.textContent = 'Error inesperado al procesar el código: ' + error.message;
-      return;
-    }
-  }
-
-  if (hashError) {
-    authMessage.textContent = 'El enlace de acceso es inválido o ha expirado. Solicita uno nuevo.';
-  }
-}
+});
 
 async function refreshSessionInfo() {
   if (!supabase) return;
@@ -178,24 +228,53 @@ async function refreshSessionInfo() {
       return;
     }
 
-    const user = data.user;
-
-    if (!user) {
+    if (!data.user) {
       sessionMessage.textContent = 'No hay ninguna sesión iniciada.';
       return;
     }
 
-    const email = (user.email || '').toLowerCase();
+    sessionMessage.textContent = `Sesión iniciada como: ${data.user.email}`;
+  } catch (error) {
+    sessionMessage.textContent = 'Error inesperado al comprobar sesión: ' + error.message;
+  }
+}
 
-    if (!allowedEmails.includes(email)) {
-      await supabase.auth.signOut();
-      sessionMessage.textContent = 'Tu cuenta ha iniciado sesión, pero no está autorizada para usar esta aplicación.';
+async function loadOwnProfile() {
+  const { data: userData, error: userError } = await supabase.auth.getUser();
+
+  if (userError) {
+    profileMessage.textContent = 'Error al obtener usuario: ' + userError.message;
+    return;
+  }
+
+  if (!userData.user) {
+    profileMessage.textContent = 'Debes iniciar sesión para cargar tu perfil.';
+    return;
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('id, email, display_name, is_active')
+      .eq('id', userData.user.id)
+      .maybeSingle();
+
+    if (error) {
+      profileMessage.textContent = 'Error al cargar el perfil: ' + error.message;
       return;
     }
 
-    sessionMessage.textContent = `Sesión iniciada como: ${email}`;
+    if (!data) {
+      profileMessage.textContent = 'No se ha encontrado perfil para este usuario.';
+      return;
+    }
+
+    displayNameInput.value = data.display_name || '';
+    profileMessage.textContent = data.display_name
+      ? `Perfil cargado. Nombre visible actual: ${data.display_name}`
+      : 'Perfil cargado. Aún no has definido nombre visible.';
   } catch (error) {
-    sessionMessage.textContent = 'Error inesperado al comprobar sesión: ' + error.message;
+    profileMessage.textContent = 'Error inesperado al cargar el perfil: ' + error.message;
   }
 }
 
@@ -276,6 +355,7 @@ loadButton.addEventListener('click', async () => {
   }
 
   const { data: userData } = await supabase.auth.getUser();
+
   if (!userData.user) {
     resultMessage.textContent = 'Debes iniciar sesión antes de cargar partidos.';
     return;
