@@ -18,6 +18,11 @@ const resultContainer = document.getElementById('teamsContainer');
 
 let supabase = null;
 
+const allowedEmails = [
+  'sulo13@hotmail.com'
+  // añade aquí los correos autorizados temporalmente
+];
+
 connectButton.addEventListener('click', async () => {
   const url = supabaseUrlInput.value.trim();
   const key = supabaseKeyInput.value.trim();
@@ -50,23 +55,27 @@ sendOtpButton.addEventListener('click', async () => {
     return;
   }
 
+  if (!allowedEmails.includes(email)) {
+    authMessage.textContent = 'Este correo no está autorizado para acceder.';
+    return;
+  }
+
   authMessage.textContent = 'Enviando acceso...';
 
   try {
     const { error } = await supabase.auth.signInWithOtp({
       email,
       options: {
-        shouldCreateUser: false,
         emailRedirectTo: window.location.origin + window.location.pathname
       }
     });
 
     if (error) {
-      authMessage.textContent = 'No se ha podido enviar el acceso. Si tu correo está autorizado, inténtalo de nuevo en unos minutos.';
+      authMessage.textContent = 'Error al enviar el acceso: ' + error.message;
       return;
     }
 
-    authMessage.textContent = 'Si tu correo está autorizado, recibirás un enlace de acceso.';
+    authMessage.textContent = 'Te hemos enviado un enlace de acceso al correo.';
   } catch (error) {
     authMessage.textContent = 'Error inesperado al iniciar acceso: ' + error.message;
   }
@@ -119,7 +128,7 @@ async function handleAuthRedirect() {
       });
 
       if (error) {
-        authMessage.textContent = 'Error al completar el acceso desde el enlace: ' + error.message;
+        authMessage.textContent = 'Error al completar el acceso: ' + error.message;
         return;
       }
 
@@ -127,7 +136,7 @@ async function handleAuthRedirect() {
       authMessage.textContent = 'Acceso completado correctamente.';
       return;
     } catch (error) {
-      authMessage.textContent = 'Error inesperado al procesar tokens de acceso: ' + error.message;
+      authMessage.textContent = 'Error inesperado al procesar el acceso: ' + error.message;
       return;
     }
   }
@@ -139,7 +148,7 @@ async function handleAuthRedirect() {
       const { error } = await supabase.auth.exchangeCodeForSession(code);
 
       if (error) {
-        authMessage.textContent = 'Error al completar el acceso desde el enlace: ' + error.message;
+        authMessage.textContent = 'Error al completar el acceso: ' + error.message;
         return;
       }
 
@@ -148,7 +157,7 @@ async function handleAuthRedirect() {
       authMessage.textContent = 'Acceso completado correctamente.';
       return;
     } catch (error) {
-      authMessage.textContent = 'Error inesperado al procesar el código de acceso: ' + error.message;
+      authMessage.textContent = 'Error inesperado al procesar el código: ' + error.message;
       return;
     }
   }
@@ -162,19 +171,29 @@ async function refreshSessionInfo() {
   if (!supabase) return;
 
   try {
-    const { data, error } = await supabase.auth.getSession();
+    const { data, error } = await supabase.auth.getUser();
 
     if (error) {
       sessionMessage.textContent = 'Error al comprobar sesión: ' + error.message;
       return;
     }
 
-    if (!data.session || !data.session.user) {
+    const user = data.user;
+
+    if (!user) {
       sessionMessage.textContent = 'No hay ninguna sesión iniciada.';
       return;
     }
 
-    sessionMessage.textContent = `Sesión iniciada como: ${data.session.user.email}`;
+    const email = (user.email || '').toLowerCase();
+
+    if (!allowedEmails.includes(email)) {
+      await supabase.auth.signOut();
+      sessionMessage.textContent = 'Tu cuenta ha iniciado sesión, pero no está autorizada para usar esta aplicación.';
+      return;
+    }
+
+    sessionMessage.textContent = `Sesión iniciada como: ${email}`;
   } catch (error) {
     sessionMessage.textContent = 'Error inesperado al comprobar sesión: ' + error.message;
   }
@@ -253,6 +272,12 @@ function renderPhaseSection(phaseName, matches, teamsMap) {
 loadButton.addEventListener('click', async () => {
   if (!supabase) {
     resultMessage.textContent = 'Primero conecta con Supabase.';
+    return;
+  }
+
+  const { data: userData } = await supabase.auth.getUser();
+  if (!userData.user) {
+    resultMessage.textContent = 'Debes iniciar sesión antes de cargar partidos.';
     return;
   }
 
