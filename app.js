@@ -30,6 +30,7 @@ connectButton.addEventListener('click', async () => {
   try {
     supabase = createClient(url, key);
     connectMessage.textContent = 'Conexión creada correctamente.';
+    await handleAuthRedirect();
     await refreshSessionInfo();
   } catch (error) {
     connectMessage.textContent = 'Error al crear la conexión: ' + error.message;
@@ -56,7 +57,7 @@ sendOtpButton.addEventListener('click', async () => {
       email,
       options: {
         shouldCreateUser: false,
-        emailRedirectTo: window.location.href
+        emailRedirectTo: window.location.origin + window.location.pathname
       }
     });
 
@@ -65,7 +66,7 @@ sendOtpButton.addEventListener('click', async () => {
       return;
     }
 
-    authMessage.textContent = 'Si tu correo está autorizado, recibirás un enlace o código de acceso.';
+    authMessage.textContent = 'Si tu correo está autorizado, recibirás un enlace de acceso.';
   } catch (error) {
     authMessage.textContent = 'Error inesperado al iniciar acceso: ' + error.message;
   }
@@ -96,23 +97,48 @@ logoutButton.addEventListener('click', async () => {
   sessionMessage.textContent = 'Sesión cerrada.';
 });
 
+async function handleAuthRedirect() {
+  if (!supabase) return;
+
+  const currentUrl = new URL(window.location.href);
+  const code = currentUrl.searchParams.get('code');
+
+  if (!code) return;
+
+  try {
+    const { error } = await supabase.auth.exchangeCodeForSession(code);
+
+    if (error) {
+      authMessage.textContent = 'Error al completar el acceso desde el enlace: ' + error.message;
+      return;
+    }
+
+    currentUrl.searchParams.delete('code');
+    window.history.replaceState({}, document.title, currentUrl.pathname);
+
+    authMessage.textContent = 'Acceso completado correctamente.';
+  } catch (error) {
+    authMessage.textContent = 'Error inesperado al procesar el enlace: ' + error.message;
+  }
+}
+
 async function refreshSessionInfo() {
   if (!supabase) return;
 
   try {
-    const { data, error } = await supabase.auth.getUser();
+    const { data, error } = await supabase.auth.getSession();
 
     if (error) {
       sessionMessage.textContent = 'Error al comprobar sesión: ' + error.message;
       return;
     }
 
-    if (!data.user) {
+    if (!data.session || !data.session.user) {
       sessionMessage.textContent = 'No hay ninguna sesión iniciada.';
       return;
     }
 
-    sessionMessage.textContent = `Sesión iniciada como: ${data.user.email}`;
+    sessionMessage.textContent = `Sesión iniciada como: ${data.session.user.email}`;
   } catch (error) {
     sessionMessage.textContent = 'Error inesperado al comprobar sesión: ' + error.message;
   }
