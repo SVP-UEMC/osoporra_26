@@ -95,30 +95,66 @@ logoutButton.addEventListener('click', async () => {
   }
 
   sessionMessage.textContent = 'Sesión cerrada.';
+  authMessage.textContent = '';
 });
 
 async function handleAuthRedirect() {
   if (!supabase) return;
 
-  const currentUrl = new URL(window.location.href);
-  const code = currentUrl.searchParams.get('code');
+  const url = new URL(window.location.href);
+  const hash = window.location.hash.startsWith('#')
+    ? window.location.hash.substring(1)
+    : window.location.hash;
 
-  if (!code) return;
+  const hashParams = new URLSearchParams(hash);
+  const accessToken = hashParams.get('access_token');
+  const refreshToken = hashParams.get('refresh_token');
+  const hashError = hashParams.get('error_description') || hashParams.get('error');
 
-  try {
-    const { error } = await supabase.auth.exchangeCodeForSession(code);
+  if (accessToken && refreshToken) {
+    try {
+      const { error } = await supabase.auth.setSession({
+        access_token: accessToken,
+        refresh_token: refreshToken
+      });
 
-    if (error) {
-      authMessage.textContent = 'Error al completar el acceso desde el enlace: ' + error.message;
+      if (error) {
+        authMessage.textContent = 'Error al completar el acceso desde el enlace: ' + error.message;
+        return;
+      }
+
+      window.history.replaceState({}, document.title, url.pathname);
+      authMessage.textContent = 'Acceso completado correctamente.';
+      return;
+    } catch (error) {
+      authMessage.textContent = 'Error inesperado al procesar tokens de acceso: ' + error.message;
       return;
     }
+  }
 
-    currentUrl.searchParams.delete('code');
-    window.history.replaceState({}, document.title, currentUrl.pathname);
+  const code = url.searchParams.get('code');
 
-    authMessage.textContent = 'Acceso completado correctamente.';
-  } catch (error) {
-    authMessage.textContent = 'Error inesperado al procesar el enlace: ' + error.message;
+  if (code) {
+    try {
+      const { error } = await supabase.auth.exchangeCodeForSession(code);
+
+      if (error) {
+        authMessage.textContent = 'Error al completar el acceso desde el enlace: ' + error.message;
+        return;
+      }
+
+      url.searchParams.delete('code');
+      window.history.replaceState({}, document.title, url.pathname);
+      authMessage.textContent = 'Acceso completado correctamente.';
+      return;
+    } catch (error) {
+      authMessage.textContent = 'Error inesperado al procesar el código de acceso: ' + error.message;
+      return;
+    }
+  }
+
+  if (hashError) {
+    authMessage.textContent = 'El enlace de acceso es inválido o ha expirado. Solicita uno nuevo.';
   }
 }
 
