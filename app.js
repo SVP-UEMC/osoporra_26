@@ -1,29 +1,31 @@
-const SUPABASE_URL = 'https://lrdvbbbflgyyklhgjjrh.supabase.co
-';
-const SUPABASE_ANON_KEY = 'sb_publishable_YPvMAPaF4wn4pH00cO5qGA_OcsesdUD
-';
+import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
 
-const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+let supabase = null;
 
-const registerForm = document.getElementById('register-form');
-const loginForm = document.getElementById('login-form');
-const sessionButton = document.getElementById('check-session-btn');
-const logoutButton = document.getElementById('logout-btn');
-const loadProfileButton = document.getElementById('load-profile-btn');
-const saveProfileButton = document.getElementById('save-profile-btn');
+const supabaseUrlInput = document.getElementById('supabaseUrl');
+const supabaseKeyInput = document.getElementById('supabaseKey');
+const connectButton = document.getElementById('connectButton');
+const connectMessage = document.getElementById('connectMessage');
 
-const registerEmailInput = document.getElementById('register-email');
-const registerPasswordInput = document.getElementById('register-password');
-const registerMessage = document.getElementById('register-message');
+const emailInput = document.getElementById('emailInput');
+const passwordInput = document.getElementById('passwordInput');
+const passwordConfirmInput = document.getElementById('passwordConfirmInput');
 
-const loginEmailInput = document.getElementById('login-email');
-const loginPasswordInput = document.getElementById('login-password');
-const loginMessage = document.getElementById('login-message');
+const registerButton = document.getElementById('registerButton');
+const loginButton = document.getElementById('loginButton');
+const logoutButton = document.getElementById('logoutButton');
 
-const sessionMessage = document.getElementById('session-message');
+const authMessage = document.getElementById('authMessage');
+const sessionMessage = document.getElementById('sessionMessage');
 
-const displayNameInput = document.getElementById('display-name');
-const profileMessage = document.getElementById('profile-message');
+const displayNameInput = document.getElementById('displayNameInput');
+const loadProfileButton = document.getElementById('loadProfileButton');
+const saveProfileButton = document.getElementById('saveProfileButton');
+const profileMessage = document.getElementById('profileMessage');
+
+const loadTeamsButton = document.getElementById('loadTeamsButton');
+const teamsMessage = document.getElementById('teamsMessage');
+const teamsContainer = document.getElementById('teamsContainer');
 
 function normalizeEmail(email) {
   return String(email || '').trim().toLowerCase();
@@ -32,6 +34,86 @@ function normalizeEmail(email) {
 function setMessage(element, message, isError = false) {
   element.textContent = message;
   element.style.color = isError ? '#b42318' : '#067647';
+}
+
+function clearMessage(element) {
+  element.textContent = '';
+}
+
+function requireSupabase() {
+  if (!supabase) {
+    throw new Error('Primero debes conectar con Supabase.');
+  }
+}
+
+async function connectSupabase() {
+  clearMessage(connectMessage);
+  clearMessage(sessionMessage);
+  clearMessage(authMessage);
+  clearMessage(profileMessage);
+
+  const url = String(supabaseUrlInput.value || '').trim();
+  const key = String(supabaseKeyInput.value || '').trim();
+
+  if (!url || !key) {
+    setMessage(connectMessage, 'Introduce la Project URL y la anon key.', true);
+    return;
+  }
+
+  try {
+    supabase = createClient(url, key);
+
+    const { data, error } = await supabase.auth.getSession();
+
+    if (error) {
+      setMessage(connectMessage, 'Conectado, pero error al comprobar sesión: ' + error.message, true);
+      return;
+    }
+
+    setMessage(connectMessage, 'Conexión correcta con Supabase.');
+
+    if (data.session?.user) {
+      setMessage(sessionMessage, `Sesión activa: ${data.session.user.email}`);
+    } else {
+      setMessage(sessionMessage, 'No hay sesión activa.', true);
+    }
+
+    supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_IN' && session?.user) {
+        setMessage(sessionMessage, `Sesión activa: ${session.user.email}`);
+      }
+
+      if (event === 'SIGNED_OUT') {
+        displayNameInput.value = '';
+        setMessage(sessionMessage, 'Sesión cerrada.');
+        clearMessage(profileMessage);
+      }
+    });
+  } catch (error) {
+    setMessage(connectMessage, 'Error al conectar: ' + error.message, true);
+  }
+}
+
+async function getCurrentSession() {
+  requireSupabase();
+
+  const { data, error } = await supabase.auth.getSession();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return data.session || null;
+}
+
+async function getCurrentUser() {
+  const session = await getCurrentSession();
+
+  if (!session || !session.user) {
+    return null;
+  }
+
+  return session.user;
 }
 
 async function ensureProfileExists(user) {
@@ -51,7 +133,7 @@ async function ensureProfileExists(user) {
     return existingProfile;
   }
 
-  const { data: newProfile, error: insertError } = await supabase
+  const { data: insertedProfile, error: insertError } = await supabase
     .from('profiles')
     .insert({
       id: user.id,
@@ -65,125 +147,136 @@ async function ensureProfileExists(user) {
     throw new Error(insertError.message);
   }
 
-  return newProfile;
+  return insertedProfile;
 }
 
-async function registerUser(event) {
-  event.preventDefault();
-
-  const email = normalizeEmail(registerEmailInput.value);
-  const password = registerPasswordInput.value;
-
-  registerMessage.textContent = '';
-
-  if (!email || !password) {
-    setMessage(registerMessage, 'Introduce email y contraseña.', true);
-    return;
-  }
+async function registerUser() {
+  clearMessage(authMessage);
 
   try {
+    requireSupabase();
+
+    const email = normalizeEmail(emailInput.value);
+    const password = String(passwordInput.value || '');
+    const passwordConfirm = String(passwordConfirmInput.value || '');
+
+    if (!email || !password || !passwordConfirm) {
+      setMessage(authMessage, 'Completa email, contraseña y confirmación.', true);
+      return;
+    }
+
+    if (password !== passwordConfirm) {
+      setMessage(authMessage, 'Las contraseñas no coinciden.', true);
+      return;
+    }
+
+    if (password.length < 6) {
+      setMessage(authMessage, 'La contraseña debe tener al menos 6 caracteres.', true);
+      return;
+    }
+
     const { data, error } = await supabase.auth.signUp({
       email,
       password
     });
 
     if (error) {
-      setMessage(registerMessage, 'Error en el registro: ' + error.message, true);
+      setMessage(authMessage, 'Error en el registro: ' + error.message, true);
       return;
     }
 
     if (data.user) {
       setMessage(
-        registerMessage,
-        'Registro correcto. Si no entra sesión automáticamente, inicia sesión manualmente.'
+        authMessage,
+        'Registro correcto. Si no entra sesión automáticamente, usa el botón de iniciar sesión.'
       );
-      return;
+    } else {
+      setMessage(authMessage, 'Registro enviado. Revisa si debes confirmar el email.');
     }
 
-    setMessage(registerMessage, 'Registro enviado. Revisa si necesitas confirmar el email.');
+    const session = await getCurrentSession();
+
+    if (session?.user) {
+      setMessage(sessionMessage, `Sesión activa: ${session.user.email}`);
+    } else {
+      setMessage(sessionMessage, 'No hay sesión activa tras el registro.', true);
+    }
   } catch (error) {
-    setMessage(registerMessage, 'Error inesperado en el registro: ' + error.message, true);
+    setMessage(authMessage, 'Error inesperado en el registro: ' + error.message, true);
   }
 }
 
-async function loginUser(event) {
-  event.preventDefault();
-
-  const email = normalizeEmail(loginEmailInput.value);
-  const password = loginPasswordInput.value;
-
-  loginMessage.textContent = '';
-
-  if (!email || !password) {
-    setMessage(loginMessage, 'Introduce email y contraseña.', true);
-    return;
-  }
+async function loginUser() {
+  clearMessage(authMessage);
 
   try {
+    requireSupabase();
+
+    const email = normalizeEmail(emailInput.value);
+    const password = String(passwordInput.value || '');
+
+    if (!email || !password) {
+      setMessage(authMessage, 'Introduce email y contraseña.', true);
+      return;
+    }
+
     const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password
     });
 
     if (error) {
-      setMessage(loginMessage, 'Error al iniciar sesión: ' + error.message, true);
+      setMessage(authMessage, 'Error al iniciar sesión: ' + error.message, true);
       return;
     }
 
     if (!data.session || !data.user) {
-      setMessage(loginMessage, 'Login incompleto: no se recibió sesión.', true);
+      setMessage(authMessage, 'Login incompleto: no se recibió sesión.', true);
       return;
     }
 
-    setMessage(loginMessage, 'Sesión iniciada correctamente.');
+    setMessage(authMessage, 'Sesión iniciada correctamente.');
+    setMessage(sessionMessage, `Sesión activa: ${data.user.email}`);
   } catch (error) {
-    setMessage(loginMessage, 'Error inesperado al iniciar sesión: ' + error.message, true);
+    setMessage(authMessage, 'Error inesperado al iniciar sesión: ' + error.message, true);
   }
 }
 
-async function checkSession() {
-  sessionMessage.textContent = '';
+async function logoutUser() {
+  clearMessage(authMessage);
 
   try {
-    const { data, error } = await supabase.auth.getSession();
+    requireSupabase();
+
+    const { error } = await supabase.auth.signOut();
 
     if (error) {
-      setMessage(sessionMessage, 'Error al comprobar sesión: ' + error.message, true);
+      setMessage(authMessage, 'Error al cerrar sesión: ' + error.message, true);
       return;
     }
 
-    if (!data.session) {
-      setMessage(sessionMessage, 'No hay sesión activa.', true);
-      return;
-    }
-
-    const user = data.session.user;
-    setMessage(
-      sessionMessage,
-      `Sesión activa: ${user.email} (${user.id})`
-    );
+    displayNameInput.value = '';
+    setMessage(authMessage, 'Sesión cerrada.');
+    setMessage(sessionMessage, 'No hay sesión activa.', true);
+    clearMessage(profileMessage);
   } catch (error) {
-    setMessage(sessionMessage, 'Error inesperado al comprobar sesión: ' + error.message, true);
+    setMessage(authMessage, 'Error inesperado al cerrar sesión: ' + error.message, true);
   }
 }
 
 async function loadOwnProfile() {
-  profileMessage.textContent = '';
+  clearMessage(profileMessage);
 
   try {
-    const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+    requireSupabase();
 
-    if (sessionError) {
-      setMessage(profileMessage, 'Error al comprobar sesión: ' + sessionError.message, true);
-      return;
-    }
+    const user = await getCurrentUser();
 
-    if (!sessionData.session || !sessionData.session.user) {
+    if (!user) {
       setMessage(profileMessage, 'Debes iniciar sesión para cargar tu perfil.', true);
       return;
     }
 
-    const user = sessionData.session.user;
     const profile = await ensureProfileExists(user);
 
     displayNameInput.value = profile.display_name || '';
@@ -199,36 +292,32 @@ async function loadOwnProfile() {
 }
 
 async function saveOwnProfile() {
-  profileMessage.textContent = '';
+  clearMessage(profileMessage);
 
   try {
-    const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+    requireSupabase();
 
-    if (sessionError) {
-      setMessage(profileMessage, 'Error al comprobar sesión: ' + sessionError.message, true);
-      return;
-    }
+    const user = await getCurrentUser();
 
-    if (!sessionData.session || !sessionData.session.user) {
+    if (!user) {
       setMessage(profileMessage, 'Debes iniciar sesión para guardar tu perfil.', true);
       return;
     }
 
-    const user = sessionData.session.user;
     const displayName = String(displayNameInput.value || '').trim();
 
     await ensureProfileExists(user);
 
-    const { error: updateError } = await supabase
+    const { error } = await supabase
       .from('profiles')
       .update({
-        display_name: displayName || null,
-        email: normalizeEmail(user.email)
+        email: normalizeEmail(user.email),
+        display_name: displayName || null
       })
       .eq('id', user.id);
 
-    if (updateError) {
-      setMessage(profileMessage, 'Error al guardar el perfil: ' + updateError.message, true);
+    if (error) {
+      setMessage(profileMessage, 'Error al guardar el perfil: ' + error.message, true);
       return;
     }
 
@@ -239,42 +328,119 @@ async function saveOwnProfile() {
         : 'Perfil guardado. Nombre visible vacío.'
     );
   } catch (error) {
-    setMessage(profileMessage, 'Error inesperado al guardar el perfil: ' + error.message, true);
+    setMessage(profileMessage, 'Error al guardar el perfil: ' + error.message, true);
   }
 }
 
-async function logoutUser() {
-  try {
-    const { error } = await supabase.auth.signOut();
+async function loadMatches() {
+  clearMessage(teamsMessage);
+  teamsContainer.innerHTML = '';
 
-    if (error) {
-      setMessage(sessionMessage, 'Error al cerrar sesión: ' + error.message, true);
+  try {
+    requireSupabase();
+
+    const user = await getCurrentUser();
+
+    if (!user) {
+      setMessage(teamsMessage, 'Debes iniciar sesión para cargar los partidos.', true);
       return;
     }
 
-    displayNameInput.value = '';
-    setMessage(sessionMessage, 'Sesión cerrada.');
-    profileMessage.textContent = '';
+    const candidateTables = [
+      'matches',
+      'partidos',
+      'fixtures',
+      'games'
+    ];
+
+    let matches = null;
+    let lastError = null;
+    let usedTable = null;
+
+    for (const tableName of candidateTables) {
+      const { data, error } = await supabase
+        .from(tableName)
+        .select('*')
+        .limit(50);
+
+      if (!error) {
+        matches = data || [];
+        usedTable = tableName;
+        break;
+      }
+
+      lastError = error;
+    }
+
+    if (!usedTable) {
+      setMessage(
+        teamsMessage,
+        'No se pudo cargar partidos. Aún no encuentro una tabla válida (`matches`, `partidos`, `fixtures` o `games`). Error: ' + (lastError?.message || 'desconocido'),
+        true
+      );
+      return;
+    }
+
+    if (!matches || matches.length === 0) {
+      setMessage(teamsMessage, `Sin partidos en la tabla ${usedTable}.`, true);
+      return;
+    }
+
+    setMessage(teamsMessage, `Partidos cargados desde la tabla ${usedTable}: ${matches.length}`);
+
+    const list = document.createElement('div');
+    list.className = 'match-list';
+
+    matches.forEach((match) => {
+      const item = document.createElement('article');
+      item.className = 'team-card';
+
+      const homeTeam =
+        match.home_team ||
+        match.local_team ||
+        match.team_home ||
+        match.home ||
+        'Equipo local';
+
+      const awayTeam =
+        match.away_team ||
+        match.visitante_team ||
+        match.team_away ||
+        match.away ||
+        'Equipo visitante';
+
+      const dateValue =
+        match.match_date ||
+        match.date ||
+        match.kickoff ||
+        match.start_time ||
+        '';
+
+      const stageValue =
+        match.stage ||
+        match.round ||
+        match.phase ||
+        '';
+
+      item.innerHTML = `
+        <h3>${homeTeam} vs ${awayTeam}</h3>
+        <p>${stageValue ? `Fase: ${stageValue}` : 'Fase no indicada'}</p>
+        <p>${dateValue ? `Fecha: ${dateValue}` : 'Fecha no indicada'}</p>
+      `;
+
+      list.appendChild(item);
+    });
+
+    teamsContainer.appendChild(list);
   } catch (error) {
-    setMessage(sessionMessage, 'Error inesperado al cerrar sesión: ' + error.message, true);
+    setMessage(teamsMessage, 'Error al cargar partidos: ' + error.message, true);
   }
 }
 
-registerForm?.addEventListener('submit', registerUser);
-loginForm?.addEventListener('submit', loginUser);
-sessionButton?.addEventListener('click', checkSession);
+connectButton?.addEventListener('click', connectSupabase);
+registerButton?.addEventListener('click', registerUser);
+loginButton?.addEventListener('click', loginUser);
+logoutButton?.addEventListener('click', logoutUser);
 loadProfileButton?.addEventListener('click', loadOwnProfile);
 saveProfileButton?.addEventListener('click', saveOwnProfile);
-logoutButton?.addEventListener('click', logoutUser);
-
-supabase.auth.onAuthStateChange((event, session) => {
-  if (event === 'SIGNED_IN' && session?.user) {
-    setMessage(sessionMessage, `Sesión activa: ${session.user.email}`);
-  }
-
-  if (event === 'SIGNED_OUT') {
-    displayNameInput.value = '';
-    setMessage(sessionMessage, 'Sesión cerrada.');
-    profileMessage.textContent = '';
-  }
-});
+loadTeamsButton?.addEventListener('click', loadMatches);
