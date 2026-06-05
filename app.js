@@ -46,6 +46,21 @@ function requireSupabase() {
   }
 }
 
+function formatDate(dateValue) {
+  if (!dateValue) return 'Fecha no indicada';
+
+  const date = new Date(dateValue);
+
+  if (Number.isNaN(date.getTime())) {
+    return 'Fecha no indicada';
+  }
+
+  return new Intl.DateTimeFormat('es-ES', {
+    dateStyle: 'medium',
+    timeStyle: 'short'
+  }).format(date);
+}
+
 async function connectSupabase() {
   clearMessage(connectMessage);
   clearMessage(sessionMessage);
@@ -346,47 +361,25 @@ async function loadMatches() {
       return;
     }
 
-    const candidateTables = [
-      'matches',
-      'partidos',
-      'fixtures',
-      'games'
-    ];
+    const { data, error } = await supabase
+      .from('v_matches_full')
+      .select('*')
+      .order('kickoff_at', { ascending: true })
+      .limit(50);
 
-    let matches = null;
-    let lastError = null;
-    let usedTable = null;
-
-    for (const tableName of candidateTables) {
-      const { data, error } = await supabase
-        .from(tableName)
-        .select('*')
-        .limit(50);
-
-      if (!error) {
-        matches = data || [];
-        usedTable = tableName;
-        break;
-      }
-
-      lastError = error;
-    }
-
-    if (!usedTable) {
-      setMessage(
-        teamsMessage,
-        'No se pudo cargar partidos. Aún no encuentro una tabla válida (`matches`, `partidos`, `fixtures` o `games`). Error: ' + (lastError?.message || 'desconocido'),
-        true
-      );
+    if (error) {
+      setMessage(teamsMessage, 'Error al cargar partidos: ' + error.message, true);
       return;
     }
 
-    if (!matches || matches.length === 0) {
-      setMessage(teamsMessage, `Sin partidos en la tabla ${usedTable}.`, true);
+    const matches = data || [];
+
+    if (matches.length === 0) {
+      setMessage(teamsMessage, 'No hay partidos disponibles.', true);
       return;
     }
 
-    setMessage(teamsMessage, `Partidos cargados desde la tabla ${usedTable}: ${matches.length}`);
+    setMessage(teamsMessage, `Partidos cargados: ${matches.length}`);
 
     const list = document.createElement('div');
     list.className = 'match-list';
@@ -395,37 +388,15 @@ async function loadMatches() {
       const item = document.createElement('article');
       item.className = 'team-card';
 
-      const homeTeam =
-        match.home_team ||
-        match.local_team ||
-        match.team_home ||
-        match.home ||
-        'Equipo local';
-
-      const awayTeam =
-        match.away_team ||
-        match.visitante_team ||
-        match.team_away ||
-        match.away ||
-        'Equipo visitante';
-
-      const dateValue =
-        match.match_date ||
-        match.date ||
-        match.kickoff ||
-        match.start_time ||
-        '';
-
-      const stageValue =
-        match.stage ||
-        match.round ||
-        match.phase ||
-        '';
+      const homeTeam = match.home_team_name || match.home_team_short_name || 'Equipo local';
+      const awayTeam = match.away_team_name || match.away_team_short_name || 'Equipo visitante';
+      const stageName = match.stage_name || match.stage_code || 'Fase no indicada';
+      const kickoffText = formatDate(match.kickoff_at);
 
       item.innerHTML = `
         <h3>${homeTeam} vs ${awayTeam}</h3>
-        <p>${stageValue ? `Fase: ${stageValue}` : 'Fase no indicada'}</p>
-        <p>${dateValue ? `Fecha: ${dateValue}` : 'Fecha no indicada'}</p>
+        <p>${stageName}</p>
+        <p>${kickoffText}</p>
       `;
 
       list.appendChild(item);
