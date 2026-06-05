@@ -43,6 +43,7 @@ const leaderboardMessage = document.getElementById('leaderboardMessage');
 const leaderboardContainer = document.getElementById('leaderboardContainer');
 
 const loadAdminMatchesButton = document.getElementById('loadAdminMatchesButton');
+const recalculatePointsButton = document.getElementById('recalculatePointsButton');
 const adminMatchesMessage = document.getElementById('adminMatchesMessage');
 const adminMatchesContainer = document.getElementById('adminMatchesContainer');
 
@@ -488,6 +489,26 @@ async function saveAdminMatchResult(match, homeInput, awayInput, statusSelect, m
   }
 }
 
+async function recalculatePoints() {
+  clearMessage(adminMatchesMessage);
+
+  try {
+    requireSupabase();
+
+    const { data, error } = await supabase.rpc('recalculate_match_prediction_points');
+
+    if (error) {
+      setMessage(adminMatchesMessage, 'Error al recalcular puntos: ' + error.message, true);
+      return;
+    }
+
+    const updatedRows = data?.updated_rows ?? 0;
+    setMessage(adminMatchesMessage, `Puntos recalculados. Filas actualizadas: ${updatedRows}`);
+  } catch (error) {
+    setMessage(adminMatchesMessage, 'Error al recalcular puntos: ' + error.message, true);
+  }
+}
+
 function createPredictionCard(match, existingPrediction) {
   const card = document.createElement('article');
   card.className = 'team-card';
@@ -928,3 +949,4 @@ loadTopScorerButton?.addEventListener('click', loadTopScorerPrediction);
 saveTopScorerButton?.addEventListener('click', saveTopScorerPrediction);
 loadLeaderboardButton?.addEventListener('click', loadLeaderboard);
 loadAdminMatchesButton?.addEventListener('click', loadAdminMatches);
+recalculatePointsButton?.addEventListener('click', recalculatePoints);
