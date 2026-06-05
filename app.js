@@ -38,6 +38,14 @@ const loadTopScorerButton = document.getElementById('loadTopScorerButton');
 const saveTopScorerButton = document.getElementById('saveTopScorerButton');
 const topScorerMessage = document.getElementById('topScorerMessage');
 
+const loadLeaderboardButton = document.getElementById('loadLeaderboardButton');
+const leaderboardMessage = document.getElementById('leaderboardMessage');
+const leaderboardContainer = document.getElementById('leaderboardContainer');
+
+const loadAdminMatchesButton = document.getElementById('loadAdminMatchesButton');
+const adminMatchesMessage = document.getElementById('adminMatchesMessage');
+const adminMatchesContainer = document.getElementById('adminMatchesContainer');
+
 function normalizeEmail(email) {
   return String(email || '').trim().toLowerCase();
 }
@@ -107,6 +115,8 @@ async function connectSupabase() {
   clearMessage(teamsMessage);
   clearMessage(myPredictionsMessage);
   clearMessage(topScorerMessage);
+  clearMessage(leaderboardMessage);
+  clearMessage(adminMatchesMessage);
 
   const url = String(supabaseUrlInput.value || '').trim();
   const key = String(supabaseKeyInput.value || '').trim();
@@ -147,6 +157,8 @@ async function connectSupabase() {
         clearMessage(profileMessage);
         teamsContainer.innerHTML = '';
         if (myPredictionsContainer) myPredictionsContainer.innerHTML = '';
+        if (leaderboardContainer) leaderboardContainer.innerHTML = '';
+        if (adminMatchesContainer) adminMatchesContainer.innerHTML = '';
       }
     });
   } catch (error) {
@@ -298,8 +310,12 @@ async function logoutUser() {
     clearMessage(teamsMessage);
     clearMessage(myPredictionsMessage);
     clearMessage(topScorerMessage);
+    clearMessage(leaderboardMessage);
+    clearMessage(adminMatchesMessage);
     teamsContainer.innerHTML = '';
     if (myPredictionsContainer) myPredictionsContainer.innerHTML = '';
+    if (leaderboardContainer) leaderboardContainer.innerHTML = '';
+    if (adminMatchesContainer) adminMatchesContainer.innerHTML = '';
   } catch (error) {
     setMessage(authMessage, 'Error inesperado al cerrar sesión: ' + error.message, true);
   }
@@ -430,6 +446,48 @@ async function saveMatchPrediction(match, homeInput, awayInput, messageElement) 
   }
 }
 
+async function saveAdminMatchResult(match, homeInput, awayInput, statusSelect, messageElement) {
+  clearMessage(messageElement);
+
+  try {
+    requireSupabase();
+
+    const homeScore = parseInteger(homeInput.value);
+    const awayScore = parseInteger(awayInput.value);
+    const status = normalizeText(statusSelect.value) || 'scheduled';
+
+    if (homeScore === null || awayScore === null) {
+      setMessage(messageElement, 'Debes indicar marcador local y visitante.', true);
+      return;
+    }
+
+    let winnerTeamId = null;
+    if (homeScore > awayScore) winnerTeamId = match.home_team_id;
+    if (awayScore > homeScore) winnerTeamId = match.away_team_id;
+
+    const payload = {
+      home_score: homeScore,
+      away_score: awayScore,
+      status,
+      winner_team_id: winnerTeamId
+    };
+
+    const { error } = await supabase
+      .from('matches')
+      .update(payload)
+      .eq('id', match.id);
+
+    if (error) {
+      setMessage(messageElement, 'Error al guardar resultado: ' + error.message, true);
+      return;
+    }
+
+    setMessage(messageElement, 'Resultado guardado.');
+  } catch (error) {
+    setMessage(messageElement, 'Error al guardar resultado: ' + error.message, true);
+  }
+}
+
 function createPredictionCard(match, existingPrediction) {
   const card = document.createElement('article');
   card.className = 'team-card';
@@ -501,6 +559,66 @@ function createMyPredictionCard(row) {
     <p>Puntos: ${points}</p>
     <p>Bloqueado: ${lockedText}</p>
   `;
+
+  return card;
+}
+
+function createLeaderboardCard(row, currentUserId) {
+  const card = document.createElement('article');
+  card.className = 'team-card';
+
+  const visibleName = row.display_name || row.email || 'Usuario';
+  const isMe = currentUserId && row.user_id === currentUserId;
+
+  card.innerHTML = `
+    <h3>${row.rank_position}. ${visibleName}${isMe ? ' (Tú)' : ''}</h3>
+    <p>Puntos partidos: ${row.match_points ?? 0}</p>
+    <p>Puntos goleador: ${row.top_scorer_points ?? 0}</p>
+    <p>Total: ${row.total_points ?? 0}</p>
+  `;
+
+  return card;
+}
+
+function createAdminMatchCard(match) {
+  const card = document.createElement('article');
+  card.className = 'team-card';
+
+  const homeName = match.home_team_name || 'Equipo local';
+  const awayName = match.away_team_name || 'Equipo visitante';
+  const stageName = match.stage_name || match.stage_code || 'Fase no indicada';
+
+  card.innerHTML = `
+    <h3>${homeName} vs ${awayName}</h3>
+    <p>${stageName}</p>
+    <p>Fecha: ${formatDate(match.kickoff_at)}</p>
+    <div class="button-row">
+      <label>Local</label>
+      <input type="number" min="0" step="1" class="admin-home-score" placeholder="0" value="${match.home_score ?? ''}" />
+      <label>Visitante</label>
+      <input type="number" min="0" step="1" class="admin-away-score" placeholder="0" value="${match.away_score ?? ''}" />
+    </div>
+    <label>Estado</label>
+    <select class="admin-status-select">
+      <option value="scheduled">scheduled</option>
+      <option value="in_progress">in_progress</option>
+      <option value="finished">finished</option>
+    </select>
+    <button class="save-admin-match-button">Guardar resultado</button>
+    <p class="admin-match-message"></p>
+  `;
+
+  const homeInput = card.querySelector('.admin-home-score');
+  const awayInput = card.querySelector('.admin-away-score');
+  const statusSelect = card.querySelector('.admin-status-select');
+  const saveButton = card.querySelector('.save-admin-match-button');
+  const message = card.querySelector('.admin-match-message');
+
+  statusSelect.value = match.status || 'scheduled';
+
+  saveButton.addEventListener('click', async () => {
+    await saveAdminMatchResult(match, homeInput, awayInput, statusSelect, message);
+  });
 
   return card;
 }
@@ -632,6 +750,10 @@ async function loadTopScorerPrediction() {
       topScorerFirstInput.value = '';
       topScorerSecondInput.value = '';
       topScorerThirdInput.value = '';
+      topScorerFirstInput.disabled = false;
+      topScorerSecondInput.disabled = false;
+      topScorerThirdInput.disabled = false;
+      saveTopScorerButton.disabled = false;
       setMessage(topScorerMessage, 'Todavía no has guardado goleador.');
       return;
     }
@@ -702,6 +824,98 @@ async function saveTopScorerPrediction() {
   }
 }
 
+async function loadLeaderboard() {
+  clearMessage(leaderboardMessage);
+  if (leaderboardContainer) leaderboardContainer.innerHTML = '';
+
+  try {
+    requireSupabase();
+
+    const user = await getCurrentUser();
+    const currentUserId = user?.id || null;
+
+    const { data, error } = await supabase
+      .from('v_leaderboard')
+      .select('*')
+      .order('rank_position', { ascending: true });
+
+    if (error) {
+      setMessage(leaderboardMessage, 'Error al cargar clasificación: ' + error.message, true);
+      return;
+    }
+
+    const rows = data || [];
+
+    if (rows.length === 0) {
+      setMessage(leaderboardMessage, 'No hay datos de clasificación todavía.', true);
+      return;
+    }
+
+    setMessage(leaderboardMessage, `Clasificación cargada: ${rows.length} usuarios`);
+
+    const list = document.createElement('div');
+    list.className = 'match-list';
+
+    rows.forEach((row) => {
+      list.appendChild(createLeaderboardCard(row, currentUserId));
+    });
+
+    if (leaderboardContainer) {
+      leaderboardContainer.appendChild(list);
+    }
+  } catch (error) {
+    setMessage(leaderboardMessage, 'Error al cargar clasificación: ' + error.message, true);
+  }
+}
+
+async function loadAdminMatches() {
+  clearMessage(adminMatchesMessage);
+  if (adminMatchesContainer) adminMatchesContainer.innerHTML = '';
+
+  try {
+    requireSupabase();
+
+    const user = await getCurrentUser();
+    if (!user) {
+      setMessage(adminMatchesMessage, 'Debes iniciar sesión para cargar partidos admin.', true);
+      return;
+    }
+
+    const { data, error } = await supabase
+      .from('v_matches_full')
+      .select('*')
+      .order('kickoff_at', { ascending: true })
+      .limit(100);
+
+    if (error) {
+      setMessage(adminMatchesMessage, 'Error al cargar partidos admin: ' + error.message, true);
+      return;
+    }
+
+    const matches = data || [];
+
+    if (matches.length === 0) {
+      setMessage(adminMatchesMessage, 'No hay partidos para administrar.', true);
+      return;
+    }
+
+    setMessage(adminMatchesMessage, `Partidos admin cargados: ${matches.length}`);
+
+    const list = document.createElement('div');
+    list.className = 'match-list';
+
+    matches.forEach((match) => {
+      list.appendChild(createAdminMatchCard(match));
+    });
+
+    if (adminMatchesContainer) {
+      adminMatchesContainer.appendChild(list);
+    }
+  } catch (error) {
+    setMessage(adminMatchesMessage, 'Error al cargar partidos admin: ' + error.message, true);
+  }
+}
+
 connectButton?.addEventListener('click', connectSupabase);
 registerButton?.addEventListener('click', registerUser);
 loginButton?.addEventListener('click', loginUser);
@@ -712,3 +926,5 @@ loadTeamsButton?.addEventListener('click', loadMatches);
 loadMyPredictionsButton?.addEventListener('click', loadMyPredictions);
 loadTopScorerButton?.addEventListener('click', loadTopScorerPrediction);
 saveTopScorerButton?.addEventListener('click', saveTopScorerPrediction);
+loadLeaderboardButton?.addEventListener('click', loadLeaderboard);
+loadAdminMatchesButton?.addEventListener('click', loadAdminMatches);
