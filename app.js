@@ -61,6 +61,13 @@ function parseInteger(value) {
   return Number.isFinite(n) ? n : null;
 }
 
+function isDeadlinePassed(deadline) {
+  if (!deadline) return false;
+  const d = new Date(deadline);
+  if (Number.isNaN(d.getTime())) return false;
+  return d.getTime() <= Date.now();
+}
+
 async function connectSupabase() {
   clearMessage(connectMessage);
   clearMessage(sessionMessage);
@@ -96,7 +103,6 @@ async function connectSupabase() {
       if (event === 'SIGNED_IN' && session?.user) {
         setMessage(sessionMessage, `Sesión activa: ${session.user.email}`);
       }
-
       if (event === 'SIGNED_OUT') {
         displayNameInput.value = '';
         setMessage(sessionMessage, 'Sesión cerrada.');
@@ -315,43 +321,16 @@ async function saveOwnProfile() {
   }
 }
 
-function createPredictionCard(match) {
-  const card = document.createElement('article');
-  card.className = 'team-card';
-  card.dataset.matchId = String(match.id);
+async function loadExistingPrediction(userId, matchId) {
+  const { data, error } = await supabase
+    .from('match_predictions')
+    .select('predicted_home_score, predicted_away_score')
+    .eq('user_id', userId)
+    .eq('match_id', matchId)
+    .maybeSingle();
 
-  const homeName = match.home_team_name || match.home_team_short_name || 'Equipo local';
-  const awayName = match.away_team_name || match.away_team_short_name || 'Equipo visitante';
-  const stageName = match.stage_name || match.stage_code || 'Fase no indicada';
-  const kickoffText = formatDate(match.kickoff_at);
-
-  card.innerHTML = `
-    <h3>${homeName} vs ${awayName}</h3>
-    <p>${stageName}</p>
-    <p>${kickoffText}</p>
-    <div class="button-row">
-      <label>Local</label>
-      <input type="number" min="0" step="1" class="home-score-input" placeholder="0" />
-      <label>Visitante</label>
-      <input type="number" min="0" step="1" class="away-score-input" placeholder="0" />
-    </div>
-    <button class="save-prediction-button">Guardar pronóstico</button>
-    <p class="match-message"></p>
-  `;
-
-  const homeInput = card.querySelector('.home-score-input');
-  const awayInput = card.querySelector('.away-score-input');
-  const saveButton = card.querySelector('.save-prediction-button');
-  const message = card.querySelector('.match-message');
-
-  homeInput.value = match.predicted_home_score ?? '';
-  awayInput.value = match.predicted_away_score ?? '';
-
-  saveButton.addEventListener('click', async () => {
-    await saveMatchPrediction(match, homeInput, awayInput, message);
-  });
-
-  return card;
+  if (error) throw error;
+  return data || null;
 }
 
 async function saveMatchPrediction(match, homeInput, awayInput, messageElement) {
@@ -363,6 +342,11 @@ async function saveMatchPrediction(match, homeInput, awayInput, messageElement) 
     const user = await getCurrentUser();
     if (!user) {
       setMessage(messageElement, 'Debes iniciar sesión para guardar un pronóstico.', true);
+      return;
+    }
+
+    if (isDeadlinePassed(match.prediction_deadline_at)) {
+      setMessage(messageElement, 'El plazo de pronóstico ya ha cerrado.', true);
       return;
     }
 
@@ -397,6 +381,57 @@ async function saveMatchPrediction(match, homeInput, awayInput, messageElement) 
   } catch (error) {
     setMessage(messageElement, 'Error al guardar el pronóstico: ' + error.message, true);
   }
+}
+
+function createPredictionCard(match, existingPrediction) {
+  const card = document.createElement('article');
+  card.className = 'team-card';
+  card.dataset.matchId = String(match.id);
+
+  const homeName = match.home_team_name || match.home_team_short_name || 'Equipo local';
+  const awayName = match.away_team_name || match.away_team_short_name || 'Equipo visitante';
+  const stageName = match.stage_name || match.stage_code || 'Fase no indicada';
+  const kickoffText = formatDate(match.kickoff_at);
+  const deadlinePassed = isDeadlinePassed(match.prediction_deadline_at);
+
+  card.innerHTML = `
+    <h3>${homeName} vs ${awayName}</h3>
+    <p>${stageName}</p>
+    <p>${kickoffText}</p>
+    <p class="deadline-line">${match.prediction_deadline_at ? `Cierre: ${formatDate(match.prediction_deadline_at)}` : 'Sin fecha límite'}</p>
+    <div class="button-row">
+      <label>Local</label>
+      <input type="number" min="0" step="1" class="home-score-input" placeholder="0" />
+      <label>Visitante</label>
+      <input type="number" min="0" step="1" class="away-score-input" placeholder="0" />
+    </div>
+    <button class="save-prediction-button">Guardar pronóstico</button>
+    <p class="match-message"></p>
+  `;
+
+  const homeInput = card.querySelector('.home-score-input');
+  const awayInput = card.querySelector('.away-score-input');
+  const saveButton = card.querySelector('.save-prediction-button');
+  const message = card.querySelector('.match-message');
+
+  if (existingPrediction) {
+    homeInput.value = existingPrediction.predicted_home_score ?? '';
+    awayInput.value = existingPrediction.predicted_away_score ?? '';
+    setMessage(message, 'Pronóstico cargado.');
+  }
+
+  if (deadlinePassed) {
+    homeInput.disabled = true;
+    awayInput.disabled = true;
+    saveButton.disabled = true;
+    setMessage(message, 'Pronóstico cerrado.', true);
+  } else {
+    saveButton.addEventListener('click', async () => {
+      await saveMatchPrediction(match, homeInput, awayInput, message);
+    });
+  }
+
+  return card;
 }
 
 async function loadMatches() {
@@ -435,9 +470,15 @@ async function loadMatches() {
     const list = document.createElement('div');
     list.className = 'match-list';
 
-    matches.forEach((match) => {
-      list.appendChild(createPredictionCard(match));
-    });
+    for (const match of matches) {
+      let existingPrediction = null;
+      try {
+        existingPrediction = await loadExistingPrediction(user.id, match.id);
+      } catch (predictionError) {
+        console.warn('No se pudo cargar la predicción existente', predictionError);
+      }
+      list.appendChild(createPredictionCard(match, existingPrediction));
+    }
 
     teamsContainer.appendChild(list);
   } catch (error) {
