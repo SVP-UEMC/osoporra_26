@@ -27,16 +27,22 @@ const loadTeamsButton = document.getElementById('loadTeamsButton');
 const teamsMessage = document.getElementById('teamsMessage');
 const teamsContainer = document.getElementById('teamsContainer');
 
+const loadMyPredictionsButton = document.getElementById('loadMyPredictionsButton');
+const myPredictionsMessage = document.getElementById('myPredictionsMessage');
+const myPredictionsContainer = document.getElementById('myPredictionsContainer');
+
 function normalizeEmail(email) {
   return String(email || '').trim().toLowerCase();
 }
 
 function setMessage(element, message, isError = false) {
+  if (!element) return;
   element.textContent = message;
   element.style.color = isError ? '#b42318' : '#067647';
 }
 
 function clearMessage(element) {
+  if (!element) return;
   element.textContent = '';
 }
 
@@ -68,11 +74,27 @@ function isDeadlinePassed(deadline) {
   return d.getTime() <= Date.now();
 }
 
+function formatPredictionScore(home, away) {
+  if (home === null || home === undefined || away === null || away === undefined) {
+    return 'Sin pronóstico';
+  }
+  return `${home} - ${away}`;
+}
+
+function formatRealScore(home, away) {
+  if (home === null || home === undefined || away === null || away === undefined) {
+    return 'Sin resultado';
+  }
+  return `${home} - ${away}`;
+}
+
 async function connectSupabase() {
   clearMessage(connectMessage);
   clearMessage(sessionMessage);
   clearMessage(authMessage);
   clearMessage(profileMessage);
+  clearMessage(teamsMessage);
+  clearMessage(myPredictionsMessage);
 
   const url = String(supabaseUrlInput.value || '').trim();
   const key = String(supabaseKeyInput.value || '').trim();
@@ -103,10 +125,13 @@ async function connectSupabase() {
       if (event === 'SIGNED_IN' && session?.user) {
         setMessage(sessionMessage, `Sesión activa: ${session.user.email}`);
       }
+
       if (event === 'SIGNED_OUT') {
         displayNameInput.value = '';
         setMessage(sessionMessage, 'Sesión cerrada.');
         clearMessage(profileMessage);
+        teamsContainer.innerHTML = '';
+        if (myPredictionsContainer) myPredictionsContainer.innerHTML = '';
       }
     });
   } catch (error) {
@@ -252,7 +277,10 @@ async function logoutUser() {
     setMessage(authMessage, 'Sesión cerrada.');
     setMessage(sessionMessage, 'No hay sesión activa.', true);
     clearMessage(profileMessage);
+    clearMessage(teamsMessage);
+    clearMessage(myPredictionsMessage);
     teamsContainer.innerHTML = '';
+    if (myPredictionsContainer) myPredictionsContainer.innerHTML = '';
   } catch (error) {
     setMessage(authMessage, 'Error inesperado al cerrar sesión: ' + error.message, true);
   }
@@ -434,6 +462,30 @@ function createPredictionCard(match, existingPrediction) {
   return card;
 }
 
+function createMyPredictionCard(row) {
+  const card = document.createElement('article');
+  card.className = 'team-card';
+
+  const matchName = `${row.home_team_name || 'Equipo local'} vs ${row.away_team_name || 'Equipo visitante'}`;
+  const stageName = row.stage_name || row.stage_code || 'Fase no indicada';
+  const myScore = formatPredictionScore(row.predicted_home_score, row.predicted_away_score);
+  const realScore = formatRealScore(row.home_score, row.away_score);
+  const points = row.points_awarded ?? 0;
+  const lockedText = row.is_locked ? 'Sí' : 'No';
+
+  card.innerHTML = `
+    <h3>${matchName}</h3>
+    <p>${stageName}</p>
+    <p>Fecha: ${formatDate(row.kickoff_at)}</p>
+    <p>Mi pronóstico: ${myScore}</p>
+    <p>Resultado real: ${realScore}</p>
+    <p>Puntos: ${points}</p>
+    <p>Bloqueado: ${lockedText}</p>
+  `;
+
+  return card;
+}
+
 async function loadMatches() {
   clearMessage(teamsMessage);
   teamsContainer.innerHTML = '';
@@ -486,6 +538,54 @@ async function loadMatches() {
   }
 }
 
+async function loadMyPredictions() {
+  clearMessage(myPredictionsMessage);
+  if (myPredictionsContainer) myPredictionsContainer.innerHTML = '';
+
+  try {
+    requireSupabase();
+
+    const user = await getCurrentUser();
+    if (!user) {
+      setMessage(myPredictionsMessage, 'Debes iniciar sesión para cargar tus predicciones.', true);
+      return;
+    }
+
+    const { data, error } = await supabase
+      .from('v_my_match_predictions')
+      .select('*')
+      .eq('user_id', user.id)
+      .order('kickoff_at', { ascending: true });
+
+    if (error) {
+      setMessage(myPredictionsMessage, 'Error al cargar tus predicciones: ' + error.message, true);
+      return;
+    }
+
+    const rows = data || [];
+
+    if (rows.length === 0) {
+      setMessage(myPredictionsMessage, 'Todavía no tienes predicciones guardadas.', true);
+      return;
+    }
+
+    setMessage(myPredictionsMessage, `Predicciones cargadas: ${rows.length}`);
+
+    const list = document.createElement('div');
+    list.className = 'match-list';
+
+    rows.forEach((row) => {
+      list.appendChild(createMyPredictionCard(row));
+    });
+
+    if (myPredictionsContainer) {
+      myPredictionsContainer.appendChild(list);
+    }
+  } catch (error) {
+    setMessage(myPredictionsMessage, 'Error al cargar tus predicciones: ' + error.message, true);
+  }
+}
+
 connectButton?.addEventListener('click', connectSupabase);
 registerButton?.addEventListener('click', registerUser);
 loginButton?.addEventListener('click', loginUser);
@@ -493,3 +593,4 @@ logoutButton?.addEventListener('click', logoutUser);
 loadProfileButton?.addEventListener('click', loadOwnProfile);
 saveProfileButton?.addEventListener('click', saveOwnProfile);
 loadTeamsButton?.addEventListener('click', loadMatches);
+loadMyPredictionsButton?.addEventListener('click', loadMyPredictions);
