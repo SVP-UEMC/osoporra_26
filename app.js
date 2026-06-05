@@ -31,8 +31,19 @@ const loadMyPredictionsButton = document.getElementById('loadMyPredictionsButton
 const myPredictionsMessage = document.getElementById('myPredictionsMessage');
 const myPredictionsContainer = document.getElementById('myPredictionsContainer');
 
+const topScorerFirstInput = document.getElementById('topScorerFirstInput');
+const topScorerSecondInput = document.getElementById('topScorerSecondInput');
+const topScorerThirdInput = document.getElementById('topScorerThirdInput');
+const loadTopScorerButton = document.getElementById('loadTopScorerButton');
+const saveTopScorerButton = document.getElementById('saveTopScorerButton');
+const topScorerMessage = document.getElementById('topScorerMessage');
+
 function normalizeEmail(email) {
   return String(email || '').trim().toLowerCase();
+}
+
+function normalizeText(value) {
+  return String(value || '').trim();
 }
 
 function setMessage(element, message, isError = false) {
@@ -95,6 +106,7 @@ async function connectSupabase() {
   clearMessage(profileMessage);
   clearMessage(teamsMessage);
   clearMessage(myPredictionsMessage);
+  clearMessage(topScorerMessage);
 
   const url = String(supabaseUrlInput.value || '').trim();
   const key = String(supabaseKeyInput.value || '').trim();
@@ -128,6 +140,9 @@ async function connectSupabase() {
 
       if (event === 'SIGNED_OUT') {
         displayNameInput.value = '';
+        topScorerFirstInput.value = '';
+        topScorerSecondInput.value = '';
+        topScorerThirdInput.value = '';
         setMessage(sessionMessage, 'Sesión cerrada.');
         clearMessage(profileMessage);
         teamsContainer.innerHTML = '';
@@ -274,11 +289,15 @@ async function logoutUser() {
     }
 
     displayNameInput.value = '';
+    topScorerFirstInput.value = '';
+    topScorerSecondInput.value = '';
+    topScorerThirdInput.value = '';
     setMessage(authMessage, 'Sesión cerrada.');
     setMessage(sessionMessage, 'No hay sesión activa.', true);
     clearMessage(profileMessage);
     clearMessage(teamsMessage);
     clearMessage(myPredictionsMessage);
+    clearMessage(topScorerMessage);
     teamsContainer.innerHTML = '';
     if (myPredictionsContainer) myPredictionsContainer.innerHTML = '';
   } catch (error) {
@@ -586,6 +605,103 @@ async function loadMyPredictions() {
   }
 }
 
+async function loadTopScorerPrediction() {
+  clearMessage(topScorerMessage);
+
+  try {
+    requireSupabase();
+
+    const user = await getCurrentUser();
+    if (!user) {
+      setMessage(topScorerMessage, 'Debes iniciar sesión para cargar tu pronóstico de goleador.', true);
+      return;
+    }
+
+    const { data, error } = await supabase
+      .from('top_scorer_predictions')
+      .select('first_pick_name, second_pick_name, third_pick_name, is_locked')
+      .eq('user_id', user.id)
+      .maybeSingle();
+
+    if (error) {
+      setMessage(topScorerMessage, 'Error al cargar goleador: ' + error.message, true);
+      return;
+    }
+
+    if (!data) {
+      topScorerFirstInput.value = '';
+      topScorerSecondInput.value = '';
+      topScorerThirdInput.value = '';
+      setMessage(topScorerMessage, 'Todavía no has guardado goleador.');
+      return;
+    }
+
+    topScorerFirstInput.value = data.first_pick_name || '';
+    topScorerSecondInput.value = data.second_pick_name || '';
+    topScorerThirdInput.value = data.third_pick_name || '';
+
+    const isLocked = data.is_locked === true;
+    topScorerFirstInput.disabled = isLocked;
+    topScorerSecondInput.disabled = isLocked;
+    topScorerThirdInput.disabled = isLocked;
+    saveTopScorerButton.disabled = isLocked;
+
+    if (isLocked) {
+      setMessage(topScorerMessage, 'Pronóstico de goleador cargado y bloqueado.', true);
+    } else {
+      setMessage(topScorerMessage, 'Pronóstico de goleador cargado.');
+    }
+  } catch (error) {
+    setMessage(topScorerMessage, 'Error al cargar goleador: ' + error.message, true);
+  }
+}
+
+async function saveTopScorerPrediction() {
+  clearMessage(topScorerMessage);
+
+  try {
+    requireSupabase();
+
+    const user = await getCurrentUser();
+    if (!user) {
+      setMessage(topScorerMessage, 'Debes iniciar sesión para guardar tu pronóstico de goleador.', true);
+      return;
+    }
+
+    const firstPick = normalizeText(topScorerFirstInput.value);
+    const secondPick = normalizeText(topScorerSecondInput.value);
+    const thirdPick = normalizeText(topScorerThirdInput.value);
+
+    if (!firstPick || !secondPick || !thirdPick) {
+      setMessage(topScorerMessage, 'Debes completar los tres nombres.', true);
+      return;
+    }
+
+    const payload = {
+      user_id: user.id,
+      first_pick_name: firstPick,
+      second_pick_name: secondPick,
+      third_pick_name: thirdPick,
+      submitted_at: new Date().toISOString(),
+      is_locked: false,
+      locked_at: null
+    };
+
+    const { error } = await supabase
+      .from('top_scorer_predictions')
+      .upsert(payload, { onConflict: 'user_id' });
+
+    if (error) {
+      setMessage(topScorerMessage, 'Error al guardar goleador: ' + error.message, true);
+      return;
+    }
+
+    setMessage(topScorerMessage, 'Pronóstico de goleador guardado.');
+  } catch (error) {
+    setMessage(topScorerMessage, 'Error al guardar goleador: ' + error.message, true);
+  }
+}
+
 connectButton?.addEventListener('click', connectSupabase);
 registerButton?.addEventListener('click', registerUser);
 loginButton?.addEventListener('click', loginUser);
@@ -594,3 +710,5 @@ loadProfileButton?.addEventListener('click', loadOwnProfile);
 saveProfileButton?.addEventListener('click', saveOwnProfile);
 loadTeamsButton?.addEventListener('click', loadMatches);
 loadMyPredictionsButton?.addEventListener('click', loadMyPredictions);
+loadTopScorerButton?.addEventListener('click', loadTopScorerPrediction);
+saveTopScorerButton?.addEventListener('click', saveTopScorerPrediction);
