@@ -74,8 +74,28 @@
       <p id="myPredictionsMessage"></p>
       <div id="myPredictionsContainer"></div>
     </section>
+
+    <section class="team-card">
+      <h2>Goleador del torneo</h2>
+
+      <label for="topScorerFirstInput">1º goleador</label>
+      <input id="topScorerFirstInput" type="text" placeholder="Primer nombre" />
+
+      <label for="topScorerSecondInput">2º goleador</label>
+      <input id="topScorerSecondInput" type="text" placeholder="Segundo nombre" />
+
+      <label for="topScorerThirdInput">3º goleador</label>
+      <input id="topScorerThirdInput" type="text" placeholder="Tercer nombre" />
+
+      <div class="button-row">
+        <button id="loadTopScorerButton">Cargar goleador</button>
+        <button id="saveTopScorerButton">Guardar goleador</button>
+      </div>
+
+      <p id="topScorerMessage"></p>
+    </section>
   </main>
 
-  <script type="module" src="app.js?v=17"></script>
+  <script type="module" src="app.js?v=18"></script>
 </body>
 </html>
