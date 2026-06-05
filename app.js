@@ -41,24 +41,24 @@ function clearMessage(element) {
 }
 
 function requireSupabase() {
-  if (!supabase) {
-    throw new Error('Primero debes conectar con Supabase.');
-  }
+  if (!supabase) throw new Error('Primero debes conectar con Supabase.');
 }
 
 function formatDate(dateValue) {
   if (!dateValue) return 'Fecha no indicada';
-
   const date = new Date(dateValue);
-
-  if (Number.isNaN(date.getTime())) {
-    return 'Fecha no indicada';
-  }
-
+  if (Number.isNaN(date.getTime())) return 'Fecha no indicada';
   return new Intl.DateTimeFormat('es-ES', {
     dateStyle: 'medium',
     timeStyle: 'short'
   }).format(date);
+}
+
+function parseInteger(value) {
+  const v = String(value || '').trim();
+  if (v === '') return null;
+  const n = Number.parseInt(v, 10);
+  return Number.isFinite(n) ? n : null;
 }
 
 async function connectSupabase() {
@@ -79,7 +79,6 @@ async function connectSupabase() {
     supabase = createClient(url, key);
 
     const { data, error } = await supabase.auth.getSession();
-
     if (error) {
       setMessage(connectMessage, 'Conectado, pero error al comprobar sesión: ' + error.message, true);
       return;
@@ -111,24 +110,14 @@ async function connectSupabase() {
 
 async function getCurrentSession() {
   requireSupabase();
-
   const { data, error } = await supabase.auth.getSession();
-
-  if (error) {
-    throw new Error(error.message);
-  }
-
+  if (error) throw new Error(error.message);
   return data.session || null;
 }
 
 async function getCurrentUser() {
   const session = await getCurrentSession();
-
-  if (!session || !session.user) {
-    return null;
-  }
-
-  return session.user;
+  return session?.user || null;
 }
 
 async function ensureProfileExists(user) {
@@ -140,13 +129,8 @@ async function ensureProfileExists(user) {
     .eq('id', user.id)
     .maybeSingle();
 
-  if (existingError) {
-    throw new Error(existingError.message);
-  }
-
-  if (existingProfile) {
-    return existingProfile;
-  }
+  if (existingError) throw new Error(existingError.message);
+  if (existingProfile) return existingProfile;
 
   const { data: insertedProfile, error: insertError } = await supabase
     .from('profiles')
@@ -158,10 +142,7 @@ async function ensureProfileExists(user) {
     .select('id, email, display_name')
     .single();
 
-  if (insertError) {
-    throw new Error(insertError.message);
-  }
-
+  if (insertError) throw new Error(insertError.message);
   return insertedProfile;
 }
 
@@ -190,27 +171,21 @@ async function registerUser() {
       return;
     }
 
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password
-    });
+    const { data, error } = await supabase.auth.signUp({ email, password });
 
     if (error) {
       setMessage(authMessage, 'Error en el registro: ' + error.message, true);
       return;
     }
 
-    if (data.user) {
-      setMessage(
-        authMessage,
-        'Registro correcto. Si no entra sesión automáticamente, usa el botón de iniciar sesión.'
-      );
-    } else {
-      setMessage(authMessage, 'Registro enviado. Revisa si debes confirmar el email.');
-    }
+    setMessage(
+      authMessage,
+      data.user
+        ? 'Registro correcto. Si no entra sesión automáticamente, usa el botón de iniciar sesión.'
+        : 'Registro enviado. Revisa si debes confirmar el email.'
+    );
 
     const session = await getCurrentSession();
-
     if (session?.user) {
       setMessage(sessionMessage, `Sesión activa: ${session.user.email}`);
     } else {
@@ -235,10 +210,7 @@ async function loginUser() {
       return;
     }
 
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password
-    });
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
 
     if (error) {
       setMessage(authMessage, 'Error al iniciar sesión: ' + error.message, true);
@@ -274,6 +246,7 @@ async function logoutUser() {
     setMessage(authMessage, 'Sesión cerrada.');
     setMessage(sessionMessage, 'No hay sesión activa.', true);
     clearMessage(profileMessage);
+    teamsContainer.innerHTML = '';
   } catch (error) {
     setMessage(authMessage, 'Error inesperado al cerrar sesión: ' + error.message, true);
   }
@@ -286,14 +259,12 @@ async function loadOwnProfile() {
     requireSupabase();
 
     const user = await getCurrentUser();
-
     if (!user) {
       setMessage(profileMessage, 'Debes iniciar sesión para cargar tu perfil.', true);
       return;
     }
 
     const profile = await ensureProfileExists(user);
-
     displayNameInput.value = profile.display_name || '';
 
     if (profile.display_name) {
@@ -313,7 +284,6 @@ async function saveOwnProfile() {
     requireSupabase();
 
     const user = await getCurrentUser();
-
     if (!user) {
       setMessage(profileMessage, 'Debes iniciar sesión para guardar tu perfil.', true);
       return;
@@ -338,12 +308,94 @@ async function saveOwnProfile() {
 
     setMessage(
       profileMessage,
-      displayName
-        ? `Perfil guardado. Nombre visible: ${displayName}`
-        : 'Perfil guardado. Nombre visible vacío.'
+      displayName ? `Perfil guardado. Nombre visible: ${displayName}` : 'Perfil guardado. Nombre visible vacío.'
     );
   } catch (error) {
     setMessage(profileMessage, 'Error al guardar el perfil: ' + error.message, true);
+  }
+}
+
+function createPredictionCard(match) {
+  const card = document.createElement('article');
+  card.className = 'team-card';
+  card.dataset.matchId = String(match.id);
+
+  const homeName = match.home_team_name || match.home_team_short_name || 'Equipo local';
+  const awayName = match.away_team_name || match.away_team_short_name || 'Equipo visitante';
+  const stageName = match.stage_name || match.stage_code || 'Fase no indicada';
+  const kickoffText = formatDate(match.kickoff_at);
+
+  card.innerHTML = `
+    <h3>${homeName} vs ${awayName}</h3>
+    <p>${stageName}</p>
+    <p>${kickoffText}</p>
+    <div class="button-row">
+      <label>Local</label>
+      <input type="number" min="0" step="1" class="home-score-input" placeholder="0" />
+      <label>Visitante</label>
+      <input type="number" min="0" step="1" class="away-score-input" placeholder="0" />
+    </div>
+    <button class="save-prediction-button">Guardar pronóstico</button>
+    <p class="match-message"></p>
+  `;
+
+  const homeInput = card.querySelector('.home-score-input');
+  const awayInput = card.querySelector('.away-score-input');
+  const saveButton = card.querySelector('.save-prediction-button');
+  const message = card.querySelector('.match-message');
+
+  homeInput.value = match.predicted_home_score ?? '';
+  awayInput.value = match.predicted_away_score ?? '';
+
+  saveButton.addEventListener('click', async () => {
+    await saveMatchPrediction(match, homeInput, awayInput, message);
+  });
+
+  return card;
+}
+
+async function saveMatchPrediction(match, homeInput, awayInput, messageElement) {
+  clearMessage(messageElement);
+
+  try {
+    requireSupabase();
+
+    const user = await getCurrentUser();
+    if (!user) {
+      setMessage(messageElement, 'Debes iniciar sesión para guardar un pronóstico.', true);
+      return;
+    }
+
+    const homeScore = parseInteger(homeInput.value);
+    const awayScore = parseInteger(awayInput.value);
+
+    if (homeScore === null || awayScore === null) {
+      setMessage(messageElement, 'Introduce dos números válidos.', true);
+      return;
+    }
+
+    const payload = {
+      user_id: user.id,
+      match_id: match.id,
+      predicted_home_score: homeScore,
+      predicted_away_score: awayScore,
+      predicted_qualified_team_id: null,
+      is_locked: false,
+      locked_at: null
+    };
+
+    const { error } = await supabase
+      .from('match_predictions')
+      .upsert(payload, { onConflict: 'user_id,match_id' });
+
+    if (error) {
+      setMessage(messageElement, 'Error al guardar el pronóstico: ' + error.message, true);
+      return;
+    }
+
+    setMessage(messageElement, 'Pronóstico guardado.');
+  } catch (error) {
+    setMessage(messageElement, 'Error al guardar el pronóstico: ' + error.message, true);
   }
 }
 
@@ -355,7 +407,6 @@ async function loadMatches() {
     requireSupabase();
 
     const user = await getCurrentUser();
-
     if (!user) {
       setMessage(teamsMessage, 'Debes iniciar sesión para cargar los partidos.', true);
       return;
@@ -385,21 +436,7 @@ async function loadMatches() {
     list.className = 'match-list';
 
     matches.forEach((match) => {
-      const item = document.createElement('article');
-      item.className = 'team-card';
-
-      const homeTeam = match.home_team_name || match.home_team_short_name || 'Equipo local';
-      const awayTeam = match.away_team_name || match.away_team_short_name || 'Equipo visitante';
-      const stageName = match.stage_name || match.stage_code || 'Fase no indicada';
-      const kickoffText = formatDate(match.kickoff_at);
-
-      item.innerHTML = `
-        <h3>${homeTeam} vs ${awayTeam}</h3>
-        <p>${stageName}</p>
-        <p>${kickoffText}</p>
-      `;
-
-      list.appendChild(item);
+      list.appendChild(createPredictionCard(match));
     });
 
     teamsContainer.appendChild(list);
